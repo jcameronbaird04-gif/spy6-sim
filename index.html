@@ -45,10 +45,30 @@ button:focus-visible { outline: 1px solid var(--ink); outline-offset: 3px; }
 .hud .counts b { color: var(--ink); font-weight: 700; font-family: var(--mono); font-size: 13px; }
 .hud .vs { margin-top: 6px; font: 500 13px/1.3 var(--cond); color: var(--s6); }
 .hud .vs.s1 { color: var(--s1); }
-.camtag { position: absolute; top: 44px; left: 18px; font: 500 11px/1 var(--cond); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); text-shadow: var(--shadow); pointer-events: none; }
+.chapline { position: absolute; top: 44px; left: 18px; font: 500 12px/1 var(--cond); letter-spacing: .06em; color: var(--ink); text-shadow: var(--shadow); pointer-events: none; }
+.legend { position: absolute; top: 84px; left: 18px; display: flex; flex-direction: column; gap: 4px; font: 400 11.5px/1 var(--cond); color: var(--ink-2); text-shadow: var(--shadow); pointer-events: none; }
+.legend span::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 7px; border: 1.5px solid currentColor; vertical-align: -1px; }
+.legend .u { color: var(--unknown); } .legend .h { color: var(--hostile); } .legend .f { color: var(--friend); } .legend .k { color: var(--kill); }
+.legend span { color: inherit; } .legend em { font-style: normal; color: var(--ink-2); }
+.chapter { position: absolute; left: 50%; top: 18%; transform: translate(-50%, 8px); width: min(640px, calc(100% - 40px)); text-align: center; pointer-events: none; opacity: 0; transition: opacity .6s, transform .6s; text-shadow: var(--shadow); }
+.chapter.on { opacity: 1; transform: translate(-50%, 0); }
+.chapter .t { font: 500 12px/1 var(--cond); letter-spacing: .3em; text-transform: uppercase; color: var(--ink-2); }
+.chapter h2 { margin: 8px 0 8px; font: 300 clamp(26px, 4vw, 40px)/1.1 var(--cond); }
+.chapter p { margin: 0; font: 400 16px/1.45 var(--cond); color: var(--ink); }
+.endcard { position: absolute; inset: 0; display: grid; place-items: center; padding: 20px; background: rgba(0,0,0,.5); text-shadow: var(--shadow); }
+.endcard[hidden] { display: none; }
+.endcard .in { width: min(640px, 100%); }
+.endcard h2 { margin: 0 0 4px; font: 300 clamp(26px, 4vw, 38px)/1.1 var(--cond); text-align: center; }
+.endcard .sub { text-align: center; color: var(--ink-2); margin: 0 0 18px; font-size: 15px; }
+.endcard table { font-size: 15px; } .endcard th, .endcard td { padding: 8px 6px; border-bottom: 1px solid rgba(255,255,255,.12); }
+.endcard td:first-child { color: var(--ink); } .endcard th { font-size: 12px; }
+.endcard td.s6 { color: var(--s6); font-weight: 700; } .endcard td.s1 { color: var(--s1); font-weight: 700; }
+.endcard .why { display: block; color: var(--ink-3); font-size: 12px; margin-top: 2px; }
+.endcard .btns { display: flex; gap: 14px; justify-content: center; margin-top: 20px; flex-wrap: wrap; }
+.camtag { position: absolute; top: 62px; left: 18px; font: 500 11px/1 var(--cond); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); text-shadow: var(--shadow); pointer-events: none; }
 
 /* ---- 3D track labels ---- */
-.trk { position: absolute; transform: translate(-50%, -50%); pointer-events: none; }
+.trk { position: absolute; left: 0; top: 0; pointer-events: none; will-change: transform; }
 .trk .box { position: absolute; inset: 0; --c: var(--unknown);
   background:
     linear-gradient(var(--c),var(--c)) top left/6px 1.5px no-repeat, linear-gradient(var(--c),var(--c)) top left/1.5px 6px no-repeat,
@@ -66,6 +86,12 @@ button:focus-visible { outline: 1px solid var(--ink); outline-offset: 3px; }
 .trk.jam .box { --c: var(--s1); } .trk.jam .lbl { color: var(--s1); }
 .trk.decoy .box { --c: rgba(190,198,205,.7); } .trk.decoy .lbl { color: var(--ink-2); }
 .trk.lost .box { --c: #ff8a3d; opacity: .85; } .trk.lost .lbl { color: #ff8a3d; }
+.trk.swarm .box, .trk.own .box { display: none; }
+.trk.swarm .lbl { left: 50%; top: -34px; margin: 0; transform: translateX(-50%); text-align: center; font-size: 12.5px; color: var(--ink); }
+.trk.swarm .lbl i { color: var(--s6); } .s1mode-v .trk.swarm.some .lbl i { color: var(--s1); }
+.trk.swarm .lbl b { color: #ff8a3d; font-weight: 700; }
+.trk.own .lbl { left: 50%; top: 10px; margin: 0; transform: translateX(-50%); color: var(--friend); font-weight: 700; letter-spacing: .06em; }
+.trk.own .lbl::before { content: ""; position: absolute; left: 50%; top: -9px; width: 1px; height: 7px; background: var(--friend); }
 .trk.ring .lbl { left: 0; margin-left: 0; font-size: 10.5px; letter-spacing: .08em; }
 .trk.fresh .box { animation: lock .45s ease-out; }
 @keyframes lock { from { transform: scale(2.2); opacity: 0; } to { transform: scale(1); opacity: 1; } }
@@ -85,9 +111,9 @@ button:focus-visible { outline: 1px solid var(--ink); outline-offset: 3px; }
 .brief .t1 { font: 700 13px/1 var(--cond); letter-spacing: .3em; color: var(--ink-2); text-transform: uppercase; }
 .brief h1 { margin: 12px 0 10px; font: 300 clamp(30px, 5vw, 54px)/1.05 var(--cond); letter-spacing: .02em; }
 .brief h1 b { font-weight: 700; color: var(--s6); } .brief h1 span { font-weight: 700; color: var(--s1); }
-.brief p { margin: 0 auto 22px; max-width: 520px; font: 400 15px/1.5 var(--cond); color: var(--ink-2); }
-.brief .go { font: 700 13px/1 var(--cond); letter-spacing: .24em; text-transform: uppercase; padding: 12px 26px; border: 1px solid rgba(255,255,255,.6); }
-.brief .go:hover { background: rgba(255,255,255,.12); }
+.brief p { margin: 0 auto 14px; max-width: 560px; font: 400 15px/1.5 var(--cond); color: var(--ink-2); }
+.go { font: 700 13px/1 var(--cond); letter-spacing: .24em; text-transform: uppercase; padding: 12px 26px; border: 1px solid rgba(255,255,255,.6); }
+.go:hover { background: rgba(255,255,255,.12); }
 
 /* ---- radar scope ---- */
 .scope { position: absolute; left: 18px; bottom: 64px; pointer-events: auto; }
@@ -155,6 +181,7 @@ dt { color: var(--ink); } dd { margin: 0; color: var(--ink-2); }
 .fine { margin-top: 14px; color: var(--ink-3); font-size: 11px; line-height: 1.5; } .fine a { color: var(--ink-2); }
 
 @media (max-width: 760px) {
+  .legend { display: none; } .chapter p { font-size: 14px; }
   .drawer { top: auto; left: 8px; right: 8px; width: auto; height: 42%; bottom: 150px; }
   .hud .meta { display: none; } .hud .radar { font-size: 13px; } .hud .l { gap: 12px; flex-wrap: wrap; } .hud .clock { font-size: 19px; }
   .shade-b { height: 210px; } .callout { bottom: 150px; font-size: 14px; }
@@ -176,7 +203,10 @@ dt { color: var(--ink); } dd { margin: 0; color: var(--ink-2); }
     <div class="l"><span class="clock" id="fClock">T+00:00</span><span class="radar" id="fRadar">AN/SPY-6(V)1</span><span class="meta" id="fRate">Standby</span></div>
     <div class="r"><div class="counts">Tracks <b id="fTrk">0</b> &nbsp;&middot;&nbsp; Kills <b id="fKill">0/17</b></div><div class="vs" id="status"></div></div>
   </div>
+  <div class="chapline" id="fChap"></div>
   <div class="camtag" id="camtag">Auto camera</div>
+  <div class="legend"><span class="u"><em>detected, not yet identified</em></span><span class="h"><em>confirmed enemy</em></span><span class="f"><em>our interceptor</em></span><span class="k"><em>destroyed</em></span></div>
+  <div class="chapter" id="chapter"><div class="t" id="chapT"></div><h2 id="chapH"></h2><p id="chapP"></p></div>
 
   <div class="scope" id="scope">
     <div class="cap"><span id="scopeTitle">SPY-6 air picture</span><span><button id="rng" type="button" aria-label="Change display range">250 nm</button> &nbsp;<button id="minimize" type="button" aria-expanded="true" aria-label="Hide radar display">Hide</button></span></div>
@@ -226,10 +256,19 @@ dt { color: var(--ink); } dd { margin: 0; color: var(--ink-2); }
 
   <div class="brief" id="brief">
     <div>
-      <div class="t1">Red Sea &middot; Flight III destroyer &middot; 17 inbound</div>
-      <h1>Same raid. <b>SPY-6</b> vs <span>SPY-1D</span>.</h1>
-      <p>Run it with SPY-6, then switch to SPY-1D and run it again. Watch range, the drone swarm, the jammer, and the decoys in space.</p>
-      <button class="go" type="button" id="briefGo">Play</button>
+      <div class="t1">Red Sea &middot; one Navy destroyer &middot; 17 incoming threats</div>
+      <h1>Same attack. <b>SPY-6</b> vs <span>SPY-1D</span>.</h1>
+      <p>A warship's radar is how it sees what is coming. The earlier and more clearly it sees each threat, the more time the crew has to shoot it down before it reaches the ship.</p>
+      <p>This plays the same attack twice: once with the Navy's new SPY-6 radar, once with the older SPY-1D that most destroyers still carry. Watch how much sooner, and how much more, SPY-6 sees.</p>
+      <button class="go" type="button" id="briefGo">Play with SPY-6</button>
+    </div>
+  </div>
+  <div class="endcard" id="endcard" hidden>
+    <div class="in">
+      <h2 id="endH">Attack defeated</h2>
+      <p class="sub" id="endSub"></p>
+      <table><thead><tr><th>What mattered</th><th>SPY-1D</th><th>SPY-6</th></tr></thead><tbody id="endT"></tbody></table>
+      <div class="btns"><button class="go" type="button" id="endOther">Run it with SPY-1D</button><button class="go" type="button" id="endData">See all the data</button><button class="go" type="button" id="endClose">Close</button></div>
     </div>
   </div>
 
@@ -250,7 +289,8 @@ dt { color: var(--ink); } dd { margin: 0; color: var(--ink-2); }
 const RE = 6371, KE = 4 / 3, RADAR_H = 0.025;     // array ~25 m above the waterline
 const R0 = 400;                                     // illustrative SPY-1D range on a 1 m^2 target (km)
 const GAIN = { spy1: 1, spy6: Math.pow(10, 1.5) };  // +15 dB
-const PLAYBACK = 8;                                 // 1x = 8x real time
+const PLAYBACK = 8; const ACT2 = 220;   // low fliers launch after the ballistic act is under way
+                                // 1x = 8x real time
 const NM = 1.852, KT = 1943.84;
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const ORIGIN = V(0, 0, 0);
@@ -282,31 +322,31 @@ const WEAPON = {
   "CIWS": { gun: true, v: 1.1, maxR: 2.0, burst: 1.6, mount: V(0, 0.0165, 0.056), label: "Phalanx CIWS" },
 };
 const THREATS = [
-  { id: "D1", tn: 1001, name: "Drone 1", cls: "UAV", kind: "drone", rcs: 0.1, len: 3.5, weapon: "SM-2", path: straight(V(70, 0, -26), 0.1, 0.0514, 0, 0.6) },
-  { id: "D2", tn: 1002, name: "Drone 2", cls: "UAV", kind: "drone", rcs: 0.1, len: 3.5, weapon: "SM-2", path: straight(V(74, 0, -6), 0.1, 0.0514, 0, 0.6) },
-  { id: "D3", tn: 1003, name: "Drone 3", cls: "UAV", kind: "drone", rcs: 0.1, len: 3.5, weapon: "SM-2", path: straight(V(71, 0, 14), 0.1, 0.0514, 0, 0.6) },
-  { id: "C1", tn: 1004, name: "Cruise missile 1", cls: "ASCM", kind: "cruise", rcs: 0.1, len: 6, weapon: "SM-2", path: straight(V(92, 0, -10), 0.02, 0.25, 0, 0) },
-  { id: "C2", tn: 1005, name: "Cruise missile 2", cls: "ASCM", kind: "cruise", rcs: 0.1, len: 6, weapon: "SM-2", path: straight(V(96, 0, 8), 0.02, 0.25, 45, 0) },
-  { id: "A1", tn: 1006, name: "Anti-ship BM", cls: "ASBM", kind: "bm", rcs: 0.05, len: 12, weapon: "SM-6", path: ballistic(V(390, 0, -110), V(0, 0, 0), 120, 70, 430) },
-  { id: "B1", tn: 1007, name: "BM in space", cls: "MRBM", kind: "bm", rcs: 0.2, len: 14, weapon: "SM-3", path: ballistic(V(250, 0, 350), V(-250, 0, -1450), 250, 120, 720) },
-  { id: "D4", tn: 1008, name: "Drone 4", cls: "UAV", kind: "drone", rcs: 0.1, len: 3.5, weapon: "5-inch", path: straight(V(12, 0, -24), 0.03, 0.0514, 250, 0.3) },
-  { id: "D5", tn: 1009, name: "Drone 5 (pop-up)", cls: "UAV", kind: "drone", rcs: 0.05, len: 2.5, weapon: "CIWS", path: straight(V(4.5, 0, 4.5), 0.015, 0.06, 380, 0.15) },
-  // drone swarm: eight Shahed-type drones pop over the horizon together (capacity showcase)
-  ...[52, 60, 68, 77, 86, 95, 104, 113].map((b, k) => {
+  { id: "D1", tn: 1001, name: "Drone 1", cls: "UAV", kind: "drone", rcs: 0.1, len: 3.5, weapon: "SM-2", path: straight(V(70, 0, -26), 0.1, 0.0514, ACT2, 0.6) },
+  { id: "D2", tn: 1002, name: "Drone 2", cls: "UAV", kind: "drone", rcs: 0.1, len: 3.5, weapon: "SM-2", path: straight(V(73, 0, 9), 0.1, 0.0514, ACT2, 0.6) },
+  { id: "D3", tn: 1003, name: "Drone 3", cls: "UAV", kind: "drone", rcs: 0.1, len: 3.5, weapon: "SM-2", path: straight(V(71, 0, 14), 0.1, 0.0514, ACT2, 0.6) },
+  { id: "C1", tn: 1004, name: "Cruise missile 1", cls: "ASCM", kind: "cruise", rcs: 0.1, len: 6, weapon: "SM-2", path: straight(V(92, 0, -10), 0.02, 0.25, ACT2 + 10, 0) },
+  { id: "C2", tn: 1005, name: "Cruise missile 2", cls: "ASCM", kind: "cruise", rcs: 0.1, len: 6, weapon: "SM-2", path: straight(V(96, 0, 8), 0.02, 0.25, ACT2 + 55, 0) },
+  { id: "A1", tn: 1006, name: "Anti-ship ballistic missile", cls: "ASBM", kind: "bm", rcs: 0.05, len: 12, weapon: "SM-6", path: ballistic(V(390, 0, -110), V(0, 0, 0), 120, 20, 430) },
+  { id: "B1", tn: 1007, name: "Ballistic missile (space)", cls: "MRBM", kind: "bm", rcs: 0.2, len: 14, weapon: "SM-3", path: ballistic(V(250, 0, 350), V(-250, 0, -1450), 250, 40, 720) },
+  { id: "D4", tn: 1008, name: "Drone 4", cls: "UAV", kind: "drone", rcs: 0.1, len: 3.5, weapon: "5-inch", path: straight(V(12, 0, -24), 0.03, 0.0514, ACT2 + 300, 0.3) },
+  { id: "D5", tn: 1009, name: "Drone 5 (pop-up)", cls: "UAV", kind: "drone", rcs: 0.05, len: 2.5, weapon: "CIWS", path: straight(V(4.5, 0, 4.5), 0.015, 0.06, ACT2 + 420, 0.15) },
+  // drone swarm: eight Shahed-type drones from one direction, so they all load the same array face (capacity showcase)
+  ...[60, 63, 66, 69, 72, 75, 78, 81].map((b, k) => {
     const r = 48 + (k % 3) * 0.8, a = b * Math.PI / 180;
     return { id: "S" + (k + 1), tn: 1010 + k, name: `Swarm drone ${k + 1}`, cls: "UAV", kind: "drone", swarm: true, rcs: 0.1, len: 3.5, weapon: "SM-2",
-      path: straight(V(Math.sin(a) * r, 0, -Math.cos(a) * r), 0.05, 0.0514, 300 + k * 1.5, 0.4) };
+      path: straight(V(Math.sin(a) * r, 0, -Math.cos(a) * r), 0.05, 0.0514, ACT2 + 340 + k * 1.5, 0.4) };
   }),
 ];
 THREATS.find(d => d.id === "B1").decoys = 3;
 // stand-off jammer aircraft (jamming showcase): orbits east of the ship, noise-jamming one sector
-const JAM = { t0: 160, pos: V(177.3, 8, 31.3), half: 12, loss: { spy1: 0.15, spy6: 0.95 } };   // bearing 100, covers the eastern drones, not the ASBM (074)
+const JAM = { t0: ACT2 + 190, pos: V(177.3, 8, 31.3), half: 12, loss: { spy1: 0.15, spy6: 0.95 } };   // bearing 100, covers the eastern drones, not the ASBM (074)
 JAM.brg = (Math.atan2(JAM.pos.x, -JAM.pos.z) * 180 / Math.PI + 360) % 360;
 const angDiff = (a, b) => Math.abs(((a - b + 540) % 360) - 180);
 const DECOY_REL = 0.17;                          // fraction of B1's flight when decoys separate
 const DISCRIM = { spy6: 6, spy1: 40 };           // seconds after release to pick out the warhead (illustrative)
 const LOST_GAP = 4;                              // a track not updated for this long is dropped (illustrative)
-const END_T = 1000;
+const END_T = 1600;
 const STAGES = ["Detect", "Track", "ID", "Engage", "Midcourse", "Terminal", "Assess"];
 
 // =============================================================== combat system model
@@ -448,7 +488,7 @@ const RUNS = { spy1: headless("spy1"), spy6: headless("spy6") };
 // =============================================================== renderer, sky, light
 const canvas = document.getElementById("scene"), view = document.getElementById("view");
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, logarithmicDepthBuffer: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+const PR_MAX = Math.min(window.devicePixelRatio || 1, 1.5); let pixRatio = PR_MAX; renderer.setPixelRatio(pixRatio);
 renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 0.92;
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputEncoding = THREE.sRGBEncoding;
@@ -502,7 +542,8 @@ const GLSL_NOISE = `
   float hash2(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
   float vnoise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
     return mix(mix(hash2(i), hash2(i+vec2(1.0,0.0)), f.x), mix(hash2(i+vec2(0.0,1.0)), hash2(i+vec2(1.0,1.0)), f.x), f.y); }
-  float fbm2(vec2 p){ float a = 0.0, w = 0.5; for (int i = 0; i < 6; i++){ a += w * vnoise(p); p = p * 2.03 + vec2(1.7, 9.2); w *= 0.5; } return a; }`;
+  float fbm3(vec2 p){ float a = 0.0, w = 0.5; for (int i = 0; i < 3; i++){ a += w * vnoise(p); p = p * 2.03 + vec2(1.7, 9.2); w *= 0.5; } return a; }
+  float fbm2(vec2 p){ float a = 0.0, w = 0.5; for (int i = 0; i < 5; i++){ a += w * vnoise(p); p = p * 2.03 + vec2(1.7, 9.2); w *= 0.5; } return a; }`;
 function skyMaterial(env) {
   return new THREE.ShaderMaterial({
     side: THREE.BackSide, depthWrite: false, fog: false, toneMapped: false,
@@ -552,7 +593,7 @@ const sky = new THREE.Mesh(new THREE.SphereGeometry(15000, 48, 24), skyMaterial(
 sky.renderOrder = -1; scene.add(sky);
 const sunLight = new THREE.DirectionalLight(0xfff0d8, 2.0);
 sunLight.position.copy(sun).multiplyScalar(0.5); sunLight.target.position.set(0, 0, 0); scene.add(sunLight, sunLight.target);
-sunLight.castShadow = true; sunLight.shadow.mapSize.set(2048, 2048);
+sunLight.castShadow = true; sunLight.shadow.mapSize.set(1024, 1024); renderer.shadowMap.autoUpdate = false;
 Object.assign(sunLight.shadow.camera, { left: -0.11, right: 0.11, top: 0.11, bottom: -0.11, near: 0.2, far: 0.8 });
 sunLight.shadow.bias = -0.0004; sunLight.shadow.normalBias = 0.0002;
 scene.add(new THREE.HemisphereLight(0xbcd2e8, 0x1d2b36, 0.35));
@@ -608,20 +649,22 @@ const ocean = new THREE.Mesh(new THREE.PlaneGeometry(8000, 8000, 200, 200),   //
       g += wave(p, normalize(vec2(0.95,-0.2)), 0.017, 0.0006, 0.005) * exp(-d / 0.6);
       g *= 0.5 * exp(-d / 1.6);
       // fine chop: noise gradient, fades with distance
-      vec2 q = p * 260.0 + vec2(time * 0.9, time * 0.5);
-      float e = 0.05, n0 = fbm2(q);
-      vec2 chop = vec2(fbm2(q + vec2(e, 0.0)) - n0, fbm2(q + vec2(0.0, e)) - n0) / e;
-      g += chop * 0.05 * exp(-d / 0.9);
+      if (d < 2.5) {               // fine chop only near the camera (it is invisible farther out)
+        vec2 q = p * 260.0 + vec2(time * 0.9, time * 0.5);
+        float e = 0.05, n0 = fbm3(q);
+        vec2 chop = vec2(fbm3(q + vec2(e, 0.0)) - n0, fbm3(q + vec2(0.0, e)) - n0) / e;
+        g += chop * 0.05 * exp(-d / 0.9);
+      }
       vec3 n = normalize(vec3(-g.x, 1.0, -g.y));
       vec3 v = normalize(camPos - vW);
       float fres = 0.02 + 0.72 * pow(1.0 - max(dot(n, v), 0.0), 5.0);
       vec3 deep = vec3(0.016, 0.068, 0.095), skyc = mix(vec3(0.58,0.66,0.73), vec3(0.18,0.33,0.52), clamp(reflect(-v,n).y*5.0,0.0,1.0));
       vec3 col = mix(deep, skyc, fres);
       col += vec3(0.0, 0.035, 0.04) * max(n.x * 3.0 + 0.3, 0.0) * (1.0 - fres);          // light through wave crests
-      float cap = smoothstep(0.80, 0.93, fbm2(p * 140.0 + vec2(time * 0.05, 0.0))) * smoothstep(0.6, 0.85, fbm2(p * 5.0 - time * 0.01));
-      col = mix(col, vec3(0.78, 0.82, 0.84), cap * 0.12 * exp(-d / 3.0));                  // scattered whitecaps
+      if (d < 3.0) { float cap = smoothstep(0.80, 0.93, fbm3(p * 140.0 + vec2(time * 0.05, 0.0))) * smoothstep(0.6, 0.85, vnoise(p * 5.0 - time * 0.01));
+        col = mix(col, vec3(0.78, 0.82, 0.84), cap * 0.12 * exp(-d / 3.0)); }                // scattered whitecaps
       vec3 h = normalize(sunDir + v); col += vec3(1.0,0.93,0.82) * pow(max(dot(n,h),0.0), 900.0) * 0.45;
-      col += vec3(1.0,0.93,0.82) * pow(max(dot(n,h),0.0), 40.0) * 0.06;
+      col += vec3(1.0,0.93,0.82) * pow(max(dot(n,h),0.0), 40.0) * 0.025;
       float fog = 1.0 - exp(-d * fogD);
       col = mix(col, vec3(0.62,0.69,0.75), fog);
       gl_FragColor = vec4(col, 1.0);
@@ -981,16 +1024,17 @@ function calloutText(key, m) {
   const b1 = RUNS.spy1.threats[B1i], b6 = RUNS.spy6.threats[B1i], nm = th => (th.dDet / NM).toFixed(0), lost1 = RUNS.spy1.threats.reduce((s, t) => s + t.lost, 0);
   const A1i = THREATS.findIndex(d => d.id === "A1"), brg = JAM.brg.toFixed(0).padStart(3, "0");
   const n6 = (RUNS.spy6.threats[A1i].dDet / NM).toFixed(0), n1 = (RUNS.spy1.threats[A1i].dDet / NM).toFixed(0), lost6 = RUNS.spy6.threats.reduce((s, t) => s + t.lost, 0);
+  const w6 = mmss(RUNS.spy6.threats[A1i].tInt - RUNS.spy6.threats[A1i].tDet), w1 = mmss(RUNS.spy1.threats[A1i].tInt - RUNS.spy1.threats[A1i].tDet);
   const T = {
-    range: ["Range", m === "spy6" ? `SPY-6 picks up the anti-ship ballistic missile at <b>${n6} nm</b>. SPY-1D won't see it until ${n1} nm.`
-                                 : `SPY-1D first sees the anti-ship ballistic missile at <b>${n1} nm</b>. SPY-6 had it at ${n6} nm.`, m === "spy1"],
-    swarm: ["Capacity", m === "spy6" ? `Eight-drone swarm. SPY-6 keeps a beam on every drone at once, so each track refreshes about every <b>${avgArr(RUNS.spy6.updates).toFixed(1)} s</b>.`
-                                     : `Eight-drone swarm. SPY-1D shares one beam per face, so track updates stretch to about <b>${avgArr(RUNS.spy1.updates).toFixed(1)} s</b> and tracks start dropping.`, m === "spy1"],
-    jam: ["Jamming", m === "spy6" ? `A jammer switches on at bearing ${brg}. SPY-6 points a null at it and keeps <b>${Math.round(JAM.loss.spy6 * 100)}%</b> of its range in that direction.`
-                                  : `A jammer switches on at bearing ${brg}. SPY-1D can't null it, so its range in that direction falls to <b>${Math.round(JAM.loss.spy1 * 100)}%</b>.`, m === "spy1"],
-    lost: ["Capacity", `SPY-1D lost a drone track and has to find it again. It drops <b>${lost1}</b> tracks over the raid; SPY-6 drops ${lost6}.`, true],
-    discrim: ["Discrimination", m === "spy6" ? `Three decoys released, four objects in space. SPY-6 picks out the warhead in <b>${DISCRIM.spy6} s</b>.`
-                                             : `Four objects in space. SPY-1D needs about <b>${DISCRIM.spy1} s</b> to find the warhead, so the SM-3 launches late.`, m === "spy1"],
+    range: ["Range", m === "spy6" ? `SPY-6 spots the missile aimed at the ship <b>${n6} nautical miles</b> out, almost as soon as it launches. The crew gets <b>${w6}</b> to shoot it down. The older radar would not see it until ${n1} nm.`
+                                 : `SPY-1D finally spots the missile aimed at the ship, only <b>${n1} nautical miles</b> out. The crew gets <b>${w1}</b> to shoot it down, instead of ${w6} with SPY-6.`, m === "spy1"],
+    swarm: ["Capacity", m === "spy6" ? `Eight drones at once. SPY-6 points a separate beam at every drone at the same time, so it never loses sight of any of them.`
+                                     : `Eight drones at once. SPY-1D has one beam per side of the ship and has to take turns, so it keeps losing drones and searching for them again.`, m === "spy1"],
+    jam: ["Jamming", m === "spy6" ? `An enemy aircraft is blasting radio noise at the ship. SPY-6 can tune out noise from one direction, so it still sees almost as far as before.`
+                                  : `An enemy aircraft is blasting radio noise at the ship. SPY-1D can't tune it out, so in that direction it can only see <b>${Math.round(JAM.loss.spy1 * 100)}%</b> as far.`, m === "spy1"],
+    lost: ["Capacity", `SPY-1D just lost track of a drone and has to find it again. It loses <b>${lost1}</b> tracks during this attack; SPY-6 loses ${lost6}.`, true],
+    discrim: ["Decoys", m === "spy6" ? `The missile in space just released 3 decoys. SPY-6's sharper picture tells the real warhead apart in <b>${DISCRIM.spy6} seconds</b>, so the interceptor launches early.`
+                                     : `The missile in space released 3 decoys. SPY-1D needs about <b>${DISCRIM.spy1} seconds</b> to tell which one is real, so the interceptor launches late.`, m === "spy1"],
   };
   return T[key];
 }
@@ -1002,7 +1046,7 @@ function runCallouts(realDt) {
   if (coLeft > 0) { coLeft -= realDt; if (coLeft <= 0) el.classList.remove("on"); return; }
   if (coLeft <= 0 && coQueue.length) {
     const [k, txt, bad] = calloutText(coQueue.shift(), mode);
-    el.innerHTML = `<span class="k">${k}</span>${txt}`; el.classList.toggle("bad", !!bad); el.classList.add("on"); coLeft = 6;
+    el.innerHTML = `<span class="k">${k}</span>${txt}`; el.classList.toggle("bad", !!bad); el.classList.add("on"); coLeft = 7.5;
   }
 }
 const camScale = (p, k) => Math.max(0.0012, camera.position.distanceTo(p) * k);
@@ -1105,6 +1149,9 @@ const overlay = document.getElementById("overlay");
 function mkTrk() { const e = document.createElement("div"); e.className = "trk"; e.innerHTML = '<div class="box"></div><div class="lbl"></div>'; e.hidden = true; overlay.appendChild(e); return e; }
 const trkEls = THREATS.map(mkTrk), intEls = THREATS.map(mkTrk);
 jamEl = mkTrk(); decoys.forEach(dc => { dc.el = mkTrk(); });
+const swarmEl = mkTrk(), shipEl = mkTrk(); shipEl.className = "trk own";
+const PLAIN = { A1: "Missile aimed at your ship", B1: "Ballistic missile", C1: "Cruise missile", C2: "Cruise missile", D5: "Pop-up drone" };
+let swarmGroup = true;
 const ringEls = ringTags.map(r => { const e = document.createElement("div"); e.className = "trk ring"; e.innerHTML = `<div class="lbl" style="color:#${r.color.toString(16).padStart(6, "0")}">${r.label}</div>`; e.hidden = true; overlay.appendChild(e); return e; });
 const proj = V(0, 0, 0);
 function toScreen(p) {
@@ -1195,7 +1242,7 @@ const rows = THREATS.map(d => {
   r.addEventListener("click", go); r.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } });
   return r;
 });
-const mmss = t => `${Math.floor(t / 60)}:${String(Math.round(t % 60)).padStart(2, "0")}`;
+const mmss = t => { const r = Math.max(0, Math.round(t)); return `${Math.floor(r / 60)}:${String(r % 60).padStart(2, "0")}`; };
 function fillCompare() {
   const tb = $("compare"); tb.innerHTML = "";
   THREATS.forEach((d, i) => {
@@ -1220,7 +1267,7 @@ function fillCompare() {
 }
 fillCompare();
 const lanes = document.getElementById("lanes"), lx = fitCanvas(lanes);
-const SHORT = ["Drone 1", "Drone 2", "Drone 3", "Cruise 1", "Cruise 2", "Anti-ship BM", "BM in space", "Drone 4", "Drone 5", ...[1, 2, 3, 4, 5, 6, 7, 8].map(k => "Swarm " + k)];
+const SHORT = ["Drone 1", "Drone 2", "Drone 3", "Cruise 1", "Cruise 2", "Missile at ship", "Space missile", "Drone 4", "Drone 5", ...[1, 2, 3, 4, 5, 6, 7, 8].map(k => "Swarm " + k)];
 const NR = THREATS.length;
 const laneEnd = Math.ceil(Math.max(...["spy1", "spy6"].flatMap(m => RUNS[m].threats.map(t => t.tInt || 0))) / 60 + 0.5) * 60;
 function drawLanes() {
@@ -1265,6 +1312,7 @@ function restart() {
   beamPool.forEach(s => { s.b.visible = false; s.life = 0; }); trackBeams.forEach(b => b.visible = false);
   trkEls.forEach(e => { e.hidden = true; e.dataset.state = ""; }); intEls.forEach(e => e.hidden = true);
   coShown = 0; coQueue = []; coLeft = 0; document.getElementById("callout").classList.remove("on");
+  chapShown = -1; chapUntil = 0; $("chapter").classList.remove("on"); $("endcard").hidden = true; $("fChap").textContent = "";
   setPlaying(false); syncStatus();
 }
 function setPlaying(p) {
@@ -1275,6 +1323,26 @@ $("briefGo").addEventListener("click", () => { $("brief").hidden = true; setPlay
 document.querySelectorAll(".tabs button").forEach(b => b.addEventListener("click", () => {
   document.querySelectorAll(".tabs button").forEach(x => { x.setAttribute("aria-selected", x === b); $(x.dataset.pane).hidden = x !== b; });
 }));
+function endOfRun() {
+  const A1i2 = THREATS.findIndex(d => d.id === "A1"), x = RUNS.spy1.threats, y = RUNS.spy6.threats, lost = m => RUNS[m].threats.reduce((s, t) => s + t.lost, 0);
+  const warn = t => mmss(t.tInt - t.tDet), firstJam = m => Math.min(...THREATS.map((d, i) => d.swarm || d.kind === "bm" ? 1e9 : (RUNS[m].threats[i].dDet || 1e9))) / NM;
+  const jamIdx = THREATS.map((d, i) => i).filter(i => x[i].dDet != null && y[i].dDet != null && y[i].dDet - x[i].dDet > 5 && THREATS[i].kind === "drone");
+  const jamNm = m => Math.min(...jamIdx.map(i => RUNS[m].threats[i].dDet)) / NM;
+  const rows = [
+    ["Warning time on the missile aimed at the ship", "more time to aim and shoot", warn(x[A1i2]), warn(y[A1i2])],
+    ["Drone tracks lost during the swarm", "every lost track has to be found again", String(lost("spy1")), String(lost("spy6"))],
+    ["Drones under jamming first seen at", "noise from the enemy aircraft blinds the old radar", jamIdx.length ? `${jamNm("spy1").toFixed(0)} nm` : "n/a", jamIdx.length ? `${jamNm("spy6").toFixed(0)} nm` : "n/a"],
+    ["Real warhead picked out of the decoys after", "the space missile can only be shot once it's identified", `${DISCRIM.spy1} s`, `${DISCRIM.spy6} s`],
+  ];
+  $("endT").innerHTML = rows.map(r => `<tr><td>${r[0]}<span class="why">${r[1]}</span></td><td class="s1">${r[2]}</td><td class="s6">${r[3]}</td></tr>`).join("");
+  $("endH").textContent = `Attack defeated with ${mode === "spy6" ? "SPY-6" : "SPY-1D"}`;
+  $("endSub").textContent = "Both radars stop all 17 threats in this model. The difference is how much time and margin the crew has.";
+  $("endOther").textContent = mode === "spy6" ? "Run it with SPY-1D" : "Run it with SPY-6";
+  $("endcard").hidden = false;
+}
+$("endOther").addEventListener("click", () => { $("endcard").hidden = true; setMode(mode === "spy6" ? "spy1" : "spy6"); setAuto(true); });
+$("endData").addEventListener("click", () => { $("endcard").hidden = true; showResults(); });
+$("endClose").addEventListener("click", () => { $("endcard").hidden = true; });
 function showResults() {
   $("drawer").classList.remove("closed"); $("panelBtn").setAttribute("aria-pressed", true);
   document.querySelector('.tabs button[data-pane="pResults"]').click();
@@ -1310,7 +1378,7 @@ function syncStatus() {
   $("status").textContent = adv; $("status").classList.toggle("s1", mode === "spy1");
   $("fClock").textContent = clock(st.t);
   $("fRadar").textContent = mode === "spy6" ? "AN/SPY-6(V)1" : "AN/SPY-1D(V)"; $("fRadar").classList.toggle("s1", mode === "spy1");
-  $("fRate").textContent = playing ? `${speed}× speed` : (st.t > 0 ? "Paused" : "Standby");
+  $("fRate").textContent = playing ? (st.ff ? "fast-forward: quiet" : `${speed}× speed`) : (st.t > 0 ? "Paused" : "Standby");
   $("fTrk").textContent = String(st.threats.filter(th => th.alive && th.stage >= 1).length);
   $("fKill").textContent = `${st.threats.filter(th => th.outcome === "Destroyed").length}/${st.threats.length}`;
   $("scopeTitle").textContent = mode === "spy6" ? "SPY-6 air picture" : "SPY-1D air picture";
@@ -1361,16 +1429,32 @@ function startFollow(i) {
 }
 // ---- auto camera: cuts to whatever the radar story is about right now; any manual input turns it off
 let auto = true, shot = null, shotHold = 0;
-function setAuto(on) { auto = on; $("camAuto").setAttribute("aria-pressed", on); if (on) { shot = null; shotHold = 0; focus = null; follow = null; camAnim = null; Object.keys(CAMS).forEach(k => $(k).setAttribute("aria-pressed", false)); } }
+function setAuto(on) { auto = on; $("camAuto").setAttribute("aria-pressed", on); if (on) { shot = null; shotHold = 0; focus = null; flight = null; follow = null; camAnim = null; Object.keys(CAMS).forEach(k => $(k).setAttribute("aria-pressed", false)); } }
 function manual() { if (auto) { auto = false; $("camAuto").setAttribute("aria-pressed", false); $("camtag").textContent = "Free camera"; } }
 const A1i = THREATS.findIndex(d => d.id === "A1");
-const SHOTNAME = { ship: "Auto · own ship", swarm: "Auto · drone swarm", jam: "Auto · jammer", a1: "Auto · anti-ship ballistic missile", space: "Auto · ballistic missile in space", decoys: "Auto · decoys in space" };
+const SHOTNAME = { ship: "Watching: your ship", swarm: "Watching: the drone swarm", jam: "Watching: the jamming aircraft", a1: "Watching: the missile aimed at your ship", space: "Watching: the missile in space", decoys: "Watching: decoys in space" };
+const DRIFT = { ship: 0.035, swarm: 0.02, jam: 0.012, space: 0.01 };
 let focus = null, focusUntil = 0, dirSeen = 0, dirDecoy = false;
 const FOCUS_OF = { range: "a1", jam: "jam", swarm: "swarm", lost: "swarm", discrim: "decoys" };
+const CHAPTERS = [
+  { t: 0, title: "Ballistic missiles", sub: "Two missiles launch from the coast. One is aimed at your ship; the other arcs up through space." },
+  { t: ACT2 + 185, title: "Jamming and sea-skimmers", sub: "An enemy aircraft floods the radar with noise while drones and cruise missiles fly in low over the water." },
+  { t: ACT2 + 335, title: "Drone swarm", sub: "Eight drones arrive together from one direction. Can the radar keep watching all of them at once?" },
+];
+let chapShown = -1, chapUntil = 0;
+function runChapters(now) {
+  let c = -1; CHAPTERS.forEach((ch, i) => { if (st.t >= ch.t) c = i; });
+  if (c !== chapShown) {
+    chapShown = c; if (c < 0) return;
+    $("fChap").textContent = `Part ${c + 1} of 3 · ${CHAPTERS[c].title}`;
+    if (playing || st.t > 0.5) { $("chapT").textContent = `Part ${c + 1} of 3`; $("chapH").textContent = CHAPTERS[c].title; $("chapP").textContent = CHAPTERS[c].sub; $("chapter").classList.add("on"); chapUntil = now + 5200; }
+  }
+  if (chapUntil && now > chapUntil) { $("chapter").classList.remove("on"); chapUntil = 0; }
+}
 function pickShot(now) {
   // events get the camera for ~8 s of real time, whatever the playback speed
   if (st.callouts.length < dirSeen) { dirSeen = 0; dirDecoy = false; focus = null; }
-  while (dirSeen < st.callouts.length) { const c = st.callouts[dirSeen++]; if (st.t - c.t < 10 && FOCUS_OF[c.key]) { focus = FOCUS_OF[c.key]; focusUntil = now + 8000; } }
+  while (dirSeen < st.callouts.length) { const c = st.callouts[dirSeen++]; if (st.t - c.t < 10 && FOCUS_OF[c.key]) { focus = FOCUS_OF[c.key]; focusUntil = now + 10000; } }
   if (st.flags.decoysOut && !dirDecoy) { dirDecoy = true; if (st.t - B1rel < 10) { focus = "decoys"; focusUntil = now + 9000; } }
   const b1 = st.threats[B1i], a1 = st.threats[A1i];
   if (focus === "decoys" && !b1.alive) focus = null;
@@ -1391,14 +1475,32 @@ function shotRig(id) {
     const b = st.threats[B1i], P = b.deadAt ? b.intPoint : b.pos, apex = B1d.path.pos(B1d.path.t0 + B1d.path.T / 2, V(0, 0, 0));
     const tgt = V((P.x + apex.x) / 2, Math.max(90, (P.y + apex.y) / 2), (P.z + apex.z) / 2), D = 950;
     return rigFrom(V(tgt.x - 0.96 * D, tgt.y + D * 0.22, tgt.z + 0.27 * D), tgt); }
-  if (id === "a1") { const a = st.threats[A1i].pos, L = Math.hypot(a.x, a.z), mid = V(a.x * 0.45, a.y * 0.5, a.z * 0.45), D = L * 0.95 + 25;
+  if (id === "a1") { const a = st.threats[A1i].pos, L = Math.hypot(a.x, a.z), mid = V(a.x * 0.55, a.y * 0.55, a.z * 0.55), D = L * 1.05 + 30;
     let px = a.z / L, pz = -a.x / L; if (pz < 0) { px = -px; pz = -pz; }              // south side: sea and coast in frame, sun behind
     return rigFrom(V(mid.x + px * D * 0.85, mid.y + D * 0.45, mid.z + pz * D * 0.85), mid); }
   if (id === "decoys") { const b = st.threats[B1i].pos, f = B1d.path.pos(st.t + 2, V(0, 0, 0)).sub(b); const L = Math.hypot(f.x, f.z) || 1;
     return rigFrom(V(b.x - f.z / L * 55 + 10, b.y + 18, b.z + f.x / L * 55), b); }
 }
+let flight = null, shotStart = 0;
+const ease = k => k * k * k * (k * (k * 6 - 15) + 10);
+function startFlight(now) {
+  const des = shotRig(shot), dd = Math.abs(Math.log(des.dist / rig.dist)), move = rig.target.distanceTo(des.target) / Math.max(rig.dist, des.dist);
+  flight = { from: { target: rig.target.clone(), yaw: rig.yaw, pitch: rig.pitch, dist: rig.dist }, k: 0, dur: Math.min(5, 2.4 + dd * 0.35 + move * 0.8), lift: Math.min(move, 1.2) };
+  shotStart = now;
+}
+function flyRig(dt, now) {
+  const base = shotRig(shot), des = { target: base.target, yaw: base.yaw + (DRIFT[shot] || 0) * Math.sin((now - shotStart) / 9000) * 3, pitch: base.pitch, dist: base.dist };
+  if (flight) {
+    flight.k = Math.min(1, flight.k + dt / flight.dur); const e = ease(flight.k), A = flight.from;
+    rig.target.lerpVectors(A.target, des.target, e);
+    let dy = des.yaw - A.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); rig.yaw = A.yaw + dy * e;
+    rig.pitch = A.pitch + (des.pitch - A.pitch) * e;
+    rig.dist = Math.exp(Math.log(A.dist) + (Math.log(des.dist) - Math.log(A.dist)) * e) * (1 + flight.lift * 0.5 * Math.sin(Math.PI * e));  // pull back mid-move
+    if (flight.k >= 1) flight = null;
+  } else steerRig(des, dt);
+}
 function steerRig(des, dt) {
-  const k = 1 - Math.exp(-dt * 1.3);
+  const k = 1 - Math.exp(-dt * 2.2);
   rig.target.lerp(des.target, k); let dy = des.yaw - rig.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); rig.yaw += dy * k;
   rig.pitch += (des.pitch - rig.pitch) * k; rig.dist = Math.exp(Math.log(rig.dist) + (Math.log(des.dist) - Math.log(rig.dist)) * k);
 }
@@ -1406,8 +1508,8 @@ $("camAuto").addEventListener("click", () => setAuto(true));
 function moveCamera(realDt) {
   if (auto && !keys.size) {
     const now = performance.now(), want = pickShot(now);
-    if (want !== shot && (now > shotHold || shot == null || want === focus)) { shot = want; shotHold = now + 4000; $("camtag").textContent = SHOTNAME[shot]; }
-    steerRig(shotRig(shot), realDt); return;
+    if (want !== shot && (now > shotHold || shot == null || want === focus)) { const first = shot == null && st.t < 1; shot = want; shotHold = now + 6000; $("camtag").textContent = SHOTNAME[shot]; if (!first) startFlight(now); else shotStart = now; }
+    flyRig(realDt, now); return;
   }
   if (keys.size) manual();
   stepCamAnim(realDt);
@@ -1429,9 +1531,11 @@ function moveCamera(realDt) {
 const dirTmp = V(0, 0, 0), Z = V(0, 0, 1);
 function place(el, p, sizePx) {
   const s = toScreen(p); if (!s || s.x < -50 || s.y < -50 || s.x > view.clientWidth + 50 || s.y > view.clientHeight + 50) { el.hidden = true; return; }
-  el.hidden = false; el.style.left = s.x + "px"; el.style.top = s.y + "px"; el.style.width = el.style.height = sizePx + "px";
+  el.hidden = false; el._x = s.x; el._y = s.y; el.style.transform = `translate3d(${s.x.toFixed(1)}px,${s.y.toFixed(1)}px,0) translate(-50%,-50%)`;
+  const sz = Math.round(sizePx); if (el._sz !== sz) { el._sz = sz; el.style.width = el.style.height = sz + "px"; }
 }
-function render(realDt) {
+function setLbl(el, html) { const l = el._lbl || (el._lbl = el.querySelector(".lbl")); if (l && l._h !== html) { l._h = html; l.innerHTML = html; } }
+function render(realDt, now = performance.now()) {
   // radar dwells -> beams
   dwellCursor = st.dwells.length;
   st.threats.forEach((th, i) => {
@@ -1484,7 +1588,7 @@ function render(realDt) {
       o.w.g.userData.plume.visible = (st.t - th.tLaunch) < (th.tInt - th.tLaunch) * 0.7 && camera.position.distanceTo(p) < 40;
       if (playing) trailPush(o.wTrail, p);
       place(intEls[i], p, Math.max(14, visScale(p, o.w.len) * o.w.len * M / camera.position.distanceTo(p) * fpx));
-      intEls[i].className = "trk friend"; intEls[i].querySelector(".lbl").textContent = d.weapon;
+      intEls[i].className = "trk friend"; setLbl(intEls[i], `Our ${d.weapon}`);
     } else intEls[i].hidden = true;
     // intercept flash + smoke
     if (th.deadAt) {
@@ -1500,27 +1604,50 @@ function render(realDt) {
       place(el, p, sz);
       const cls = th.deadAt ? "dead" : th.stage >= 3 ? "hostile" : "unknown";
       if (el.dataset.state !== cls) { el.className = "trk " + cls + " fresh"; el.dataset.state = cls; void el.offsetWidth; }
-      const rng = (p.length() / NM).toFixed(0);
+      const rng = (p.length() / NM).toFixed(0), nm = PLAIN[d.id] || d.name;
       const o1 = RUNS.spy1.threats[i], lead = mode === "spy6" && !th.deadAt && (o1.tDet == null || o1.tDet > st.t) ? `<br><em>SPY-1D can't see it yet</em>` : "";
-      el.querySelector(".lbl").innerHTML = th.deadAt ? `${d.tn} destroyed${th.intPoint.y >= 100 ? " in space" : ""}` : `${d.tn} ${th.stage >= 3 ? d.cls : "unknown"} <i>${rng} nm${p.y > 1 ? ` · ${p.y.toFixed(0)} km up` : ""}</i>${p.y >= 100 ? "<br><em>in space</em>" : ""}${lead}`;
+      let html;
+      if (th.deadAt) html = `${nm} destroyed${th.intPoint.y >= 100 ? " in space" : ""}`;
+      else {
+        const eta = d.path.t0 + d.path.T - st.t, toShip = d.id !== "B1";
+        html = `${nm} <i>${rng} nm away${p.y > 1 ? `, ${p.y.toFixed(0)} km up` : ""}</i>`
+          + (p.y >= 100 ? "<br><em>in space</em>" : "")
+          + (toShip && th.stage < 4 ? `<br><i>reaches ship in ${mmss(eta)}</i>` : "")
+          + (i === B1i && st.t >= B1rel ? (st.t >= B1rel + DISCRIM[mode] ? "<br><em>real warhead found</em>" : "<br><i>1 of 4 objects: which is real?</i>") : "")
+          + lead;
+      }
+      if (d.swarm && swarmGroup) html = "";                     // swarm is labelled as one group
+      setLbl(el, html);
     } else if (mode === "spy1" && th.alive && th.stage === 0 && RUNS.spy6.threats[i].tDet != null && RUNS.spy6.threats[i].tDet <= st.t) {
       const p = th.pos, sz = Math.max(18, visScale(p, d.len) * d.len * M / camera.position.distanceTo(p) * fpx * 1.6);
       place(el, p, sz);
       if (el.dataset.state !== "ghost") { el.className = "trk ghost"; el.dataset.state = "ghost"; }
-      el.querySelector(".lbl").innerHTML = `${d.tn} <i>no SPY-1D track</i><br><em>SPY-6 had it ${mmss(st.t - RUNS.spy6.threats[i].tDet)} ago</em>`;
+      setLbl(el, d.swarm && swarmGroup ? "" : `${PLAIN[d.id] || d.name} <i>not seen by SPY-1D</i><br><em>SPY-6 saw it ${mmss(st.t - RUNS.spy6.threats[i].tDet)} ago</em>`);
     } else if (th.alive && th.stage === 0 && th.lostAt != null && st.t - th.lostAt < 6) {
       const p = th.pos; place(el, p, 22);
       if (el.dataset.state !== "lost") { el.className = "trk lost"; el.dataset.state = "lost"; }
-      el.querySelector(".lbl").innerHTML = `${d.tn} track lost <i>re-searching</i>`;
+      setLbl(el, d.swarm && swarmGroup ? "" : `${PLAIN[d.id] || d.name} <i>track lost, searching again</i>`);
     } else el.hidden = true;
   });
+  // one label for the whole swarm: how many of its drones the radar is holding right now
+  {
+    const sw = st.threats.filter(t => t.d.swarm && t.alive && st.t >= t.d.path.t0);
+    if (swarmGroup && sw.length) {
+      const c = V(0, 0, 0); sw.forEach(t => c.add(t.pos)); c.multiplyScalar(1 / sw.length); c.y += 0.4;
+      const held = sw.filter(t => t.stage >= 1).length;
+      place(swarmEl, c, 0); swarmEl.className = "trk swarm " + (held === sw.length ? "all" : "some");
+      setLbl(swarmEl, `Drone swarm <i>${held} of ${sw.length} tracked</i>${held < sw.length ? `<br><b>${sw.length - held} not being tracked</b>` : ""}`);
+    } else swarmEl.hidden = true;
+  }
+  // own ship marker when the camera is far away
+  { const far = camera.position.length() > 3; if (far) { place(shipEl, V(0, 0, 0), 0); setLbl(shipEl, "Your ship"); } else shipEl.hidden = true; }
   // jammer
   const jOn = st.t >= JAM.t0, jVis = st.t >= JAM.t0 - 40;
   const jp = V(JAM.pos.x + 4 * Math.sin(st.t / 60), JAM.pos.y, JAM.pos.z + 4 * Math.cos(st.t / 60));
   jammer.g.visible = jVis; jammer.g.position.copy(jp); jammer.g.rotation.y = -st.t / 60 + Math.PI; jammer.g.scale.setScalar(visScale(jp, 28) * M);
   if (jVis) {
     place(jamEl, jp, Math.max(18, visScale(jp, 28) * 28 * M / camera.position.distanceTo(jp) * fpx * 1.4)); jamEl.className = "trk jam";
-    jamEl.querySelector(".lbl").innerHTML = !jOn ? `EW aircraft <i>${(jp.length() / NM).toFixed(0)} nm</i>` : `Jammer <i>bearing ${JAM.brg.toFixed(0).padStart(3, "0")}</i><br>${mode === "spy6" ? `<em>nulled, ${Math.round(JAM.loss.spy6 * 100)}% range kept</em>` : `SPY-1D range here cut to ${Math.round(JAM.loss.spy1 * 100)}%`}`;
+    setLbl(jamEl, !jOn ? `Enemy jamming aircraft <i>${(jp.length() / NM).toFixed(0)} nm away</i>` : `Jamming aircraft <i>blasting radio noise</i><br>${mode === "spy6" ? `<em>SPY-6 tunes it out: ${Math.round(JAM.loss.spy6 * 100)}% of its range kept</em>` : `SPY-1D partly blinded: ${Math.round(JAM.loss.spy1 * 100)}% of its range left this way`}`);
   } else jamEl.hidden = true;
   Object.entries(jamWedge).forEach(([m, w]) => { w.visible = jOn && m === mode; w.material.opacity = m === "spy1" ? 0.13 + 0.05 * Math.sin(st.t * 6) : 0.08; });
   // decoys
@@ -1532,16 +1659,15 @@ function render(realDt) {
     dc.m.g.position.copy(p); if (q.lengthSq() > 1e-12) dc.m.g.quaternion.setFromUnitVectors(Z, q.normalize()); dc.m.g.scale.setScalar(visScale(p, B1d.len) * M);
     if (b1.stage >= 1 || b1.deadAt) {
       place(dc.el, p, 18); dc.el.className = "trk " + (sorted ? "decoy" : "unknown");
-      dc.el.querySelector(".lbl").innerHTML = sorted ? "decoy <i>rejected</i>" : `object ${k + 2} of 4 <i>?</i>`;
+      setLbl(dc.el, sorted ? "decoy <i>ignored</i>" : `object ${k + 2} of 4 <i>?</i>`);
     } else dc.el.hidden = true;
   });
-  if (!trkEls[B1i].hidden && b1.alive && st.t >= B1rel && b1.stage >= 1) trkEls[B1i].querySelector(".lbl").innerHTML += sorted ? "<br><em>warhead</em>" : `<br><i>object 1 of 4, warhead or decoy?</i>`;
   { // declutter: when track labels collide on screen, keep the box and hide the later label
     const placed = [];
-    [...trkEls, jamEl, ...decoys.map(d => d.el)].forEach(el => {
-      const lb = el.querySelector(".lbl"); if (!lb) return; lb.style.visibility = "";
-      if (el.hidden) return; const x = parseFloat(el.style.left), y = parseFloat(el.style.top);
-      if (placed.some(q => Math.abs(q[0] - x) < 150 && Math.abs(q[1] - y) < 30)) lb.style.visibility = "hidden"; else placed.push([x, y]);
+    [swarmEl, shipEl, ...trkEls, jamEl, ...decoys.map(d => d.el), ...intEls].forEach(el => {
+      const lb = el._lbl || (el._lbl = el.querySelector(".lbl")); if (!lb) return;
+      if (el.hidden || !lb._h) return; const x = el._x, y = el._y;
+      const hide = placed.some(q => Math.abs(q[0] - x) < 140 && Math.abs(q[1] - y) < 30); if (lb._vis !== !hide) { lb._vis = !hide; lb.style.visibility = hide ? "hidden" : ""; } if (!hide) placed.push([x, y]); return;
     });
   }
   runCallouts(realDt);
@@ -1549,15 +1675,20 @@ function render(realDt) {
   karman.visible = spaceCam;
   ringTags.forEach((r, i) => { if (r.karman ? spaceCam : hiCam) place(ringEls[i], r.p, 0); else ringEls[i].hidden = true; });
   bmPaths.forEach(bp => { const th = st.threats[bp.i]; bp.line.visible = th.alive && th.stage >= 1; if (bp.line.visible) bp.line.material.color.set(th.stage >= 3 ? 0xff5348 : 0xffe14d); });
-  drawScopes(st); renderBoard(); renderLog(); syncStatus(); drawLanes();
+  if (now - uiT > 90) { uiT = now; drawScopes(st); renderBoard(); renderLog(); syncStatus(); if (!$("drawer").classList.contains("closed") && !$("pResults").hidden) drawLanes(); }
 }
 
 function resize() { const w = view.clientWidth, h = view.clientHeight; renderer.setSize(w, h, false); camera.aspect = w / Math.max(h, 1); camera.updateProjectionMatrix(); }
 window.addEventListener("resize", resize);
 let last = performance.now();
+let ftEMA = 16, perfT = 0, uiT = 0, frameN = 0;
+function quiet() {   // nothing tracked and nothing in flight: skip ahead faster so the viewer isn't waiting
+  return !st.threats.some(th => th.alive && th.stage >= 1) && !st.threats.some(th => th.tLaunch != null && th.deadAt && st.t - th.deadAt < 6) && !$("callout").classList.contains("on") && !chapUntil;
+}
 function frame(now) {
-  const realDt = Math.min((now - last) / 1000, 0.1); last = now;
-  if (playing) { acc += realDt * speed * PLAYBACK; while (acc >= 0.05) { step(st, 0.05); acc -= 0.05; } if (st.t >= END_T || doneAt(st)) { setPlaying(false); showResults(); } }
+  const rawDt = (now - last) / 1000, realDt = Math.min(rawDt, 0.1); last = now; frameN++;
+  if (playing) { const ff = quiet() ? 3 : 1; st.ff = ff > 1; acc += realDt * speed * PLAYBACK * ff; let n = 0; while (acc >= 0.05 && n++ < 400) { step(st, 0.05); acc -= 0.05; } if (st.t >= END_T || doneAt(st)) { setPlaying(false); endOfRun(); } }
+  runChapters(now);
   moveCamera(realDt);
   applyRig();
   ocean.position.set(camera.position.x, 0, camera.position.z);
@@ -1565,8 +1696,15 @@ function frame(now) {
   sky.material.uniforms.time.value = now / 1000; wake.material.uniforms.time.value = now / 1000;
   { const alt = Math.max(camera.position.y, 0), fd = 0.0026 / (1 + alt / 5); scene.fog.density = fd; ocean.material.uniforms.fogD.value = fd; sky.material.uniforms.alt.value = alt; }
   ship.position.y = Math.sin(now / 1900) * 0.0004; ship.rotation.z = Math.sin(now / 2300) * 0.012;
-  render(realDt);
+  const nearShip = camera.position.length() < 4; ship.visible = camera.position.length() < 400;
+  if (nearShip && frameN % 2 === 0) renderer.shadowMap.needsUpdate = true;
+  render(realDt, now);
   renderer.render(scene, camera);
+  // adaptive resolution: keep the frame rate up on slower laptops
+  if (rawDt < 0.5) ftEMA = ftEMA * 0.95 + rawDt * 1000 * 0.05;
+  if (now - perfT > 1500) { perfT = now;
+    if (ftEMA > 24 && pixRatio > 0.7) { pixRatio = Math.max(0.7, pixRatio - 0.15); renderer.setPixelRatio(pixRatio); resize(); }
+    else if (ftEMA < 13 && pixRatio < PR_MAX) { pixRatio = Math.min(PR_MAX, pixRatio + 0.1); renderer.setPixelRatio(pixRatio); resize(); } }
   requestAnimationFrame(frame);
 }
 resize(); restart(); requestAnimationFrame(frame);

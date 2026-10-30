@@ -4,7 +4,7 @@ Interactive 3D simulation for a PHYS 271 (Electricity & Magnetism) project at th
 
 **Live:** https://jcameronbaird04-gif.github.io/spy6-sim/
 
-A Flight III destroyer defends against a Red Sea style raid: drones, cruise missiles, an anti-ship
+The attack plays in three parts so one thing happens at a time: (1) ballistic missiles, one aimed at the ship and one through space with decoys; (2) a jamming aircraft plus drones and cruise missiles low over the water; (3) an eight-drone swarm. A Flight III destroyer defends against a Red Sea style raid: drones, cruise missiles, an anti-ship
 ballistic missile, a ballistic missile in space with decoys, an 8-drone swarm and a stand-off jammer.
 Press Play, then switch the radar between **SPY-6** and **SPY-1D** and run the same raid again.
 
@@ -12,8 +12,8 @@ Press Play, then switch the radar between **SPY-6** and **SPY-1D** and run the s
 
 | # | Advantage | What happens in the sim |
 |---|-----------|------------------------|
-| 1 | Range | SPY-6 detects the anti-ship ballistic missile at 215 nm; SPY-1D at 102 nm (315 s vs 104 s of warning) |
-| 2 | Capacity | During the swarm SPY-1D's track updates slow down and tracks are lost; SPY-6 keeps all of them |
+| 1 | Range | SPY-6 detects the anti-ship ballistic missile at 215 nm; SPY-1D at 102 nm (5:15 vs 1:40 of warning) |
+| 2 | Capacity | During the swarm SPY-1D loses 42 tracks and has to re-find them; SPY-6 loses none |
 | 3 | Jamming | A jammer turns on at T+2:40, bearing 100. SPY-6 nulls it; SPY-1D keeps only 15% of its range in that sector, so drones there are seen much later |
 | 4 | Discrimination | The ballistic missile releases 3 decoys. SPY-6 picks the warhead in 6 s, SPY-1D in about 40 s |
 | 5 | Availability | Covered in the paper and charts (SPY-1 calibration downtime, SPY-6 graceful degradation) |

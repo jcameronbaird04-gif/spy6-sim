@@ -14,7 +14,8 @@ radars:
     range_ratio_same_target: 2.37  # (10^1.5)^(1/4), from the radar range equation
     beams: digital beamforming, a beam per track in parallel
 
-threats:                         # 17 total, launched over about 6 minutes
+acts: [ballistic missiles from T+0:20, jammer + sea-skimmers from T+6:50, drone swarm from T+9:20]
+threats:                         # 17 total
   - {id: D1-D3, type: one-way attack drone, count: 3, speed_kmps: 0.0514, rcs_m2: 0.1}   # Shahed-class, ~185 km/h
   - {id: C1-C2, type: anti-ship cruise missile, count: 2, speed_kmps: 0.25, rcs_m2: 0.1, profile: sea-skimming}
   - {id: A1, type: anti-ship ballistic missile, count: 1, rcs_m2: 0.05, target: own ship}
@@ -27,7 +28,7 @@ showcase_events:                 # the five advantages, each shown in the sim wi
   1_range:          A1 detection range, SPY-6 vs SPY-1D (215 nm vs 102 nm; 315 s vs 104 s of warning)
   2_capacity:       8-drone swarm; SPY-1D track updates slow and tracks drop (TRACK LOST)
   3_jamming:
-    start_s: 160
+    start_s: 410
     jammer: stand-off EW aircraft, bearing 100, ~97 nm (covers the eastern drones, deliberately NOT the ASBM at 074)
     sector_half_width_deg: 12
     range_kept: {SPY-1D: 0.15, SPY-6: 0.95}   # illustrative; SPY-6 steers an adaptive null
@@ -37,7 +38,7 @@ showcase_events:                 # the five advantages, each shown in the sim wi
   5_availability:   shown in the charts and paper (SPY-1 calibration downtime vs SPY-6 graceful degradation)
 
 outcome:                         # both radars defeat the raid (Carney did it with SPY-1D)
-  difference: SPY-6 sees earlier, keeps every track (0 vs 25 lost), holds range under jamming, and kills the
+  difference: SPY-6 sees earlier, keeps every track (0 vs 42 lost), holds range under jamming, and kills the
               space threat about 70 s sooner, leaving more time and margin.
 
 export: the Results tab has a 'Download results (CSV)' button with every number for both radars.

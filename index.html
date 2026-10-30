@@ -1,0 +1,1138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Flight III Kill Chain</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+</head>
+<body>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* Layout: one-screen app. Realistic 3D view on the left with two radar scopes
+   inset at the bottom; a combat-system console column on the right (stacks on phones).
+   Single committed dark look, modeled on a ship's combat information center. */
+:root {
+  --bg: #0a0f14;
+  --panel: rgba(8, 14, 20, 0.88);
+  --edge: rgba(150, 180, 200, 0.22);
+  --text: #e6edf2;
+  --muted: #8fa3b2;
+  --unknown: #ffd84d;
+  --hostile: #ff5a4f;
+  --friend: #59b8ff;
+  --kill: #9be38f;
+  --accent: #59b8ff;
+  --head: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--text); font: 12.5px/1.45 var(--mono); margin: 0; overflow: hidden; }
+.app { height: 100%; display: grid; grid-template-columns: minmax(0, 1fr) 372px; }
+.view { position: relative; min-width: 0; overflow: hidden; background: #6f8aa3; }
+#scene { display: block; width: 100%; height: 100%; }
+.overlay { position: absolute; inset: 0; pointer-events: none; }
+
+.trk { position: absolute; transform: translate(-50%, -50%); pointer-events: none; }
+.trk .box { position: absolute; inset: 0;
+  --c: var(--unknown);
+  background:
+    linear-gradient(var(--c),var(--c)) top left/8px 1.5px no-repeat, linear-gradient(var(--c),var(--c)) top left/1.5px 8px no-repeat,
+    linear-gradient(var(--c),var(--c)) top right/8px 1.5px no-repeat, linear-gradient(var(--c),var(--c)) top right/1.5px 8px no-repeat,
+    linear-gradient(var(--c),var(--c)) bottom left/8px 1.5px no-repeat, linear-gradient(var(--c),var(--c)) bottom left/1.5px 8px no-repeat,
+    linear-gradient(var(--c),var(--c)) bottom right/8px 1.5px no-repeat, linear-gradient(var(--c),var(--c)) bottom right/1.5px 8px no-repeat; }
+.trk .lbl { position: absolute; left: 100%; top: 0; margin-left: 6px; white-space: nowrap;
+  font: 600 10.5px/1.25 var(--mono); color: var(--unknown); text-shadow: 0 1px 2px #000, 0 0 4px #000; }
+.trk.hostile .box { --c: var(--hostile); } .trk.hostile .lbl { color: var(--hostile); }
+.trk.dead .box { --c: var(--kill); } .trk.dead .lbl { color: var(--kill); }
+.trk.friend .box { --c: var(--friend); } .trk.friend .lbl { color: var(--friend); }
+.trk.fresh .box { animation: lock .5s ease-out; }
+@keyframes lock { from { transform: scale(2.2); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+.hud { position: absolute; top: 12px; left: max(12px, env(safe-area-inset-left, 0px)); right: 12px; display: flex; justify-content: space-between; gap: 8px; pointer-events: none; }
+.claim { max-width: 470px; padding: 9px 12px; background: var(--panel); border: 1px solid var(--edge); }
+.claim h1 { font: 700 19px/1.1 var(--head); letter-spacing: .02em; margin: 0 0 3px; text-transform: uppercase; text-wrap: balance; }
+.claim p { margin: 0; color: var(--muted); font-size: 11.5px; }
+.claim b { color: var(--text); font-weight: 600; }
+.status { padding: 7px 10px; background: var(--panel); border: 1px solid var(--edge); font: 600 12px/1.3 var(--mono); text-align: right; font-variant-numeric: tabular-nums; }
+.status span { display: block; color: var(--muted); font-weight: 400; font-size: 10.5px; }
+
+.scope { position: absolute; left: max(12px, env(safe-area-inset-left, 0px)); bottom: 60px; pointer-events: auto; background: #050b10; border: 1px solid var(--edge); }
+.scope .cap { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 5px 6px; font: 600 10px/1 var(--mono); color: var(--muted); letter-spacing: .06em; text-transform: uppercase; }
+.scope .cap button { font: 600 10px/1 var(--mono); padding: 3px 6px; }
+.scope canvas { display: block; }
+.scope.min canvas { display: none; }
+
+.controls { position: absolute; left: max(12px, env(safe-area-inset-left, 0px)); right: 12px; bottom: max(12px, env(safe-area-inset-bottom, 0px)); display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+button, select { font: 600 12px/1 var(--mono); color: var(--text); background: var(--panel); border: 1px solid var(--edge); padding: 8px 11px; cursor: pointer; }
+button:hover, select:hover { border-color: var(--accent); }
+button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button.primary { background: var(--accent); color: #04121e; border-color: var(--accent); }
+.seg { display: inline-flex; }
+.seg button + button { border-left-width: 0; }
+.seg button[aria-pressed="true"] { background: #1c3a52; border-color: var(--accent); }
+.hint { color: #dfe8ee; font-size: 11px; text-shadow: 0 1px 2px #000; }
+
+.console { min-width: 0; overflow-y: auto; background: var(--bg); border-left: 1px solid var(--edge);
+  padding-block: 14px; padding-left: 16px; padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; gap: 18px; }
+.console h2 { font: 700 14px/1 var(--head); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 0 0 8px; }
+.stages { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.stages span { font-size: 8.5px; color: var(--muted); text-align: center; text-transform: uppercase; letter-spacing: .02em; }
+.row { padding: 7px 4px; margin: 0 -4px; border-top: 1px solid rgba(150,180,200,.12); cursor: pointer; }
+.row:hover { background: rgba(89,184,255,.07); }
+.row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.row.following { background: rgba(89,184,255,.14); }
+.row .top { display: flex; justify-content: space-between; gap: 8px; }
+.row .name { font-weight: 600; }
+.row .name small { color: var(--muted); font-weight: 400; margin-left: 6px; }
+.row .st { color: var(--muted); font-size: 11px; text-align: right; }
+.row.hostile .name { color: var(--hostile); } .row.unknown .name { color: var(--unknown); } .row.dead .name { color: var(--kill); }
+.pips { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; margin-top: 5px; }
+.pip { height: 5px; background: rgba(150,180,200,.14); }
+.pip.on { background: var(--accent); }
+.row.dead .pip.on { background: var(--kill); }
+table { width: 100%; border-collapse: collapse; font-size: 11px; font-variant-numeric: tabular-nums; }
+th, td { text-align: right; padding: 4px 3px; border-bottom: 1px solid rgba(150,180,200,.12); }
+th:first-child, td:first-child { text-align: left; }
+th { color: var(--muted); font-weight: 400; }
+td.b { color: var(--accent); font-weight: 600; }
+.summary { margin: 8px 0 0; font-size: 11.5px; }
+.lanekey { display: flex; align-items: center; gap: 6px; font-size: 10.5px; color: var(--muted); margin-bottom: 6px; flex-wrap: wrap; }
+.lanekey span { display: inline-block; width: 14px; height: 6px; }
+.lanekey .k1 { background: #8a96a0; } .lanekey .k6 { background: var(--accent); margin-left: 6px; }
+.lanekey em { font-style: normal; margin-left: auto; }
+#lanes { display: block; max-width: 100%; }
+table.mini { margin-top: 8px; }
+.status b { display: block; color: var(--accent); font-weight: 600; font-size: 11px; margin-top: 3px; max-width: 260px; white-space: normal; text-align: right; }
+.trk.ghost .box { --c: rgba(220,228,235,.85); opacity: .9; } .trk.ghost .lbl { color: #e8eef2; }
+.trk .lbl i { font-style: normal; color: var(--accent); }
+.log { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; font-size: 11px; }
+.log li { color: var(--muted); } .log b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; font-size: 11px; }
+dt { color: var(--text); } dd { margin: 0; color: var(--muted); }
+.sym { display: inline-block; width: 12px; height: 7px; border: 1.5px solid currentColor; border-bottom: 0; vertical-align: 1px; }
+.fine { color: var(--muted); font-size: 10.5px; border-top: 1px solid rgba(150,180,200,.12); padding-top: 10px; }
+.fine a { color: var(--muted); }
+
+@media (max-width: 860px) {
+  body { overflow: auto; }
+  .app { height: auto; grid-template-columns: 1fr; }
+  .view { height: 80vh; min-height: 560px; }
+  .console { border-left: 0; border-top: 1px solid var(--edge); overflow: visible; }
+  .claim p { display: none; }
+  .scope { bottom: 100px; }
+}
+@media (prefers-reduced-motion: reduce) { .trk.fresh .box { animation: none; } }
+</style>
+
+<div class="app">
+  <div class="view" id="view">
+    <canvas id="scene" aria-label="3D view of a Flight III destroyer engaging a mixed missile and drone raid"></canvas>
+    <div class="overlay" id="overlay"></div>
+    <div class="hud">
+      <div class="claim">
+        <h1>SPY-6: ~30&times; more sensitive than SPY-1</h1>
+        <p><b>+15 dB</b> lets it see a target 2.4&times; farther, and digital beamforming holds a beam on every track at once. Watch one Flight III defeat a Red Sea style raid, then switch to SPY-1D and run it again.</p>
+      </div>
+      <div class="status" id="status">T+00:00<span>Press Play</span></div>
+    </div>
+    <div class="scope" id="scope">
+      <div class="cap"><span id="scopeTitle">Air picture</span><span><button id="rng" type="button" aria-label="Change display range">250 NM</button> <button id="minimize" type="button" aria-expanded="true" aria-label="Minimize radar display">&minus;</button></span></div>
+      <canvas id="ppi" width="216" height="216"></canvas>
+    </div>
+    <div class="controls">
+      <button id="play" class="primary" type="button">Play</button>
+      <button id="restart" type="button">Restart</button>
+      <div class="seg" role="group" aria-label="Radar">
+        <button id="m6" type="button" aria-pressed="true">SPY-6</button>
+        <button id="m1" type="button" aria-pressed="false">SPY-1D</button>
+      </div>
+      <select id="speed" aria-label="Playback speed">
+        <option value="1" selected>1&times;</option>
+        <option value="2">2&times;</option>
+        <option value="4">4&times;</option>
+      </select>
+      <div class="seg" role="group" aria-label="Camera">
+        <button id="camShip" type="button" aria-pressed="true">Ship</button>
+        <button id="camTac" type="button" aria-pressed="false">Tactical</button>
+        <button id="camSpace" type="button" aria-pressed="false">Space</button>
+        <button id="camUp" type="button" aria-pressed="false">Look up</button>
+      </div>
+      <span class="hint" id="hint">Drag: look around (drag up to look up into the sky) &middot; Right-drag or W A S D: move &middot; Q / E: down / up &middot; Scroll: zoom &middot; Click a threat in the list to follow it</span>
+    </div>
+  </div>
+
+  <aside class="console">
+    <section>
+      <h2>Kill chain</h2>
+      <div class="stages"><span>Detect</span><span>Track</span><span>ID</span><span>Engage</span><span>Midcrs</span><span>Term</span><span>Assess</span></div>
+      <div id="board"></div>
+    </section>
+    <section>
+      <h2>Same raid, both radars</h2>
+      <div class="lanekey"><span class="k1"></span>SPY-1D <span class="k6"></span>SPY-6 <em>bar = first detection &rarr; kill</em></div>
+      <canvas id="lanes" width="340" height="258"></canvas>
+      <table class="mini">
+        <thead><tr><th>Threat</th><th>Seen at, 1D</th><th>Seen at, 6</th></tr></thead>
+        <tbody id="compare"></tbody>
+      </table>
+      <p class="summary" id="summary"></p>
+    </section>
+    <section>
+      <h2>Combat system log</h2>
+      <ul class="log" id="log"><li>Waiting for first detection.</li></ul>
+    </section>
+    <section>
+      <h2>Reading the picture</h2>
+      <dl>
+        <dt>Blue cones</dt><dd>Radar dwells. Each flash is one look from the array face that covers that bearing. SPY-6 updates every track four times a second; SPY-1D's single beam per face takes turns between search and tracks.</dd>
+        <dt><span class="sym" style="color:var(--unknown)"></span> Yellow</dt><dd>Unknown track, newly detected.</dd>
+        <dt><span class="sym" style="color:var(--hostile)"></span> Red</dt><dd>Identified hostile.</dd>
+        <dt><span class="sym" style="color:var(--friend)"></span> Blue</dt><dd>Own interceptor: SM-2 for drones and cruise missiles, SM-6 for the anti-ship ballistic missile, SM-3 for the missile in space. Drone 4 gets the 5-inch/62 gun (airbursts), and the late pop-up Drone 5 gets the Phalanx CIWS.</dd>
+        <dt>Air picture</dt><dd>Navy track symbols: yellow square top = unknown, red diamond top = hostile, blue half circle = own missile, green X = destroyed. The dashed blue ring is detection range for a 0.1 m² target. Symbols move only when the radar updates them, so slower updates show up as jumps.</dd>
+      </dl>
+    </section>
+    <p class="fine">Illustrative model for a PHYS 271 project, from open sources. Real distances, altitudes and speeds: Shahed-type drone 185 km/h (<a href="https://armyrecognition.com/military-products/army/unmanned-systems/unmanned-aerial-vehicles/shahed-136-loitering-munition-kamikaze-suicide-drone-technical-data" target="_blank" rel="noopener">Army Recognition</a>), SM-2 and SM-6 above Mach 3 (<a href="https://www.navy.gov.au/weapon/sm-2-standard-missile" target="_blank" rel="noopener">RAN</a>), SM-3 about 3 km/s (<a href="https://en.wikipedia.org/wiki/RIM-161_Standard_Missile_3" target="_blank" rel="noopener">Wikipedia</a>). Radar ranges, target sizes and dwell times are made-up round numbers; only the 2.37&times; range ratio between radars comes from the published +15 dB. Playback 1&times; is 8&times; real time. Small objects are drawn larger when far away so they stay visible. Not real tactics or performance.</p>
+  </aside>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(() => {
+"use strict";
+// =============================================================== units: km, seconds
+const RE = 6371, KE = 4 / 3, RADAR_H = 0.025;     // array ~25 m above the waterline
+const R0 = 400;                                     // illustrative SPY-1D range on a 1 m^2 target (km)
+const GAIN = { spy1: 1, spy6: Math.pow(10, 1.5) };  // +15 dB
+const PLAYBACK = 8;                                 // 1x = 8x real time
+const NM = 1.852, KT = 1943.84;
+const V = (x, y, z) => new THREE.Vector3(x, y, z);
+const ORIGIN = V(0, 0, 0);
+const horizonKm = h => Math.sqrt(2 * KE * RE * RADAR_H) + Math.sqrt(2 * KE * RE * Math.max(h, 0));
+const rangeFor = (rcs, mode) => R0 * Math.pow(GAIN[mode] * rcs, 0.25);
+const bearing = p => (Math.atan2(p.x, -p.z) * 180 / Math.PI + 360) % 360;   // 0 = north (-z)
+const faceOf = p => Math.floor(bearing(p) / 90);                             // 0 NE, 1 SE, 2 SW, 3 NW
+
+function straight(start, alt, speed, t0, weave) {
+  const end = V(0, alt, 0), dist = Math.hypot(start.x, start.z), T = dist / speed;
+  return { t0, T, pos(t, o) {
+    const s = Math.min(Math.max((t - t0) / T, 0), 1);
+    o.set(start.x * (1 - s), alt, start.z * (1 - s));
+    if (weave) { const px = -start.z / dist, pz = start.x / dist, w = Math.sin(s * 14 + start.z) * weave * (1 - s); o.x += px * w; o.z += pz * w; }
+    return o;
+  } };
+}
+function ballistic(p0, p1, apex, t0, T) {
+  return { t0, T, boost: 0.16, pos(t, o) {
+    const s = Math.min(Math.max((t - t0) / T, 0), 1);
+    o.lerpVectors(p0, p1, s); o.y = 4 * apex * s * (1 - s); return o;
+  } };
+}
+const WEAPON = {
+  "SM-2": { v: 1.1, maxR: 166, len: 4.7, exo: false },
+  "SM-6": { v: 1.1, maxR: 240, len: 6.6, exo: false },
+  "SM-3": { v: 3.0, maxR: 900, len: 6.6, exo: true },
+  "5-inch": { gun: true, v: 0.8, maxR: 18, rate: 3, rounds: 4, mount: V(0, 0.0100, -0.0665), label: "5-inch gun" },
+  "CIWS": { gun: true, v: 1.1, maxR: 2.0, burst: 1.6, mount: V(0, 0.0165, 0.056), label: "Phalanx CIWS" },
+};
+const THREATS = [
+  { id: "D1", tn: 1001, name: "Drone 1", cls: "UAV", kind: "drone", rcs: 0.1, len: 3.5, weapon: "SM-2", path: straight(V(70, 0, -26), 0.1, 0.0514, 0, 0.6) },
+  { id: "D2", tn: 1002, name: "Drone 2", cls: "UAV", kind: "drone", rcs: 0.1, len: 3.5, weapon: "SM-2", path: straight(V(74, 0, -6), 0.1, 0.0514, 0, 0.6) },
+  { id: "D3", tn: 1003, name: "Drone 3", cls: "UAV", kind: "drone", rcs: 0.1, len: 3.5, weapon: "SM-2", path: straight(V(71, 0, 14), 0.1, 0.0514, 0, 0.6) },
+  { id: "C1", tn: 1004, name: "Cruise missile 1", cls: "ASCM", kind: "cruise", rcs: 0.1, len: 6, weapon: "SM-2", path: straight(V(92, 0, -10), 0.02, 0.25, 0, 0) },
+  { id: "C2", tn: 1005, name: "Cruise missile 2", cls: "ASCM", kind: "cruise", rcs: 0.1, len: 6, weapon: "SM-2", path: straight(V(96, 0, 8), 0.02, 0.25, 45, 0) },
+  { id: "A1", tn: 1006, name: "Anti-ship BM", cls: "ASBM", kind: "bm", rcs: 0.05, len: 12, weapon: "SM-6", path: ballistic(V(390, 0, -110), V(0, 0, 0), 120, 70, 430) },
+  { id: "B1", tn: 1007, name: "BM in space", cls: "MRBM", kind: "bm", rcs: 0.2, len: 14, weapon: "SM-3", path: ballistic(V(250, 0, 350), V(-250, 0, -1450), 250, 120, 720) },
+  { id: "D4", tn: 1008, name: "Drone 4", cls: "UAV", kind: "drone", rcs: 0.1, len: 3.5, weapon: "5-inch", path: straight(V(12, 0, -24), 0.03, 0.0514, 250, 0.3) },
+  { id: "D5", tn: 1009, name: "Drone 5 (pop-up)", cls: "UAV", kind: "drone", rcs: 0.05, len: 2.5, weapon: "CIWS", path: straight(V(4.5, 0, 4.5), 0.015, 0.06, 380, 0.15) },
+];
+const END_T = 900;
+const STAGES = ["Detect", "Track", "ID", "Engage", "Midcourse", "Terminal", "Assess"];
+
+// =============================================================== combat system model
+function newState(mode) {
+  return { mode, t: 0, events: [], dwells: [], faces: [0, 1, 2, 3].map(i => ({ i, clock: i * 0.03, slot: 0, rr: 0, searchProg: 0, lastWasSearch: false })),
+    nextSearch6: [0.1, 0.35, 0.6, 0.85], updates: [],
+    threats: THREATS.map(d => ({ d, stage: 0, looks: 0, alive: true, outcome: null, pos: V(0, -99, 0), seen: null, seenAt: 0,
+      tDet: null, dDet: null, tId: null, tLaunch: null, tInt: null, intPoint: null, nextUpd: 0, lastUpd: null, ints: null })) };
+}
+const tmp = V(0, 0, 0), tmp2 = V(0, 0, 0);
+const say = (st, msg) => st.events.push({ t: st.t, msg });
+function covered(th, mode) {
+  const p = th.pos; if (p.y < 0) return false;
+  const d = p.length();
+  return d <= rangeFor(th.d.rcs, mode) && Math.hypot(p.x, p.z) <= horizonKm(p.y);
+}
+function detect(st, th) {
+  th.stage = 1; th.tDet = st.t; th.dDet = th.pos.length(); th.looks = 1; th.lastUpd = st.t; th.seen = th.pos.clone(); th.seenAt = st.t; th.nextUpd = st.t + 0.25;
+  say(st, `DETECT track ${th.d.tn}, ${(th.dDet / NM).toFixed(0)} nm, bearing ${bearing(th.pos).toFixed(0).padStart(3, "0")}`);
+}
+function look(st, th, face) {
+  th.looks++; if (th.lastUpd != null) st.updates.push(st.t - th.lastUpd);
+  th.lastUpd = st.t; th.seen = th.pos.clone(); th.seenAt = st.t;
+  st.dwells.push({ face, p: th.pos.clone(), track: true });
+}
+const LAUNCH = V(0, 0.008, -0.04);
+function plan(st, th) {
+  const w = WEAPON[th.d.weapon], p = th.d.path, tEnd = p.t0 + p.T;
+  for (let tI = st.t + 6; tI < tEnd - 1; tI += 0.5) {
+    p.pos(tI, tmp);
+    const d = tmp.distanceTo(LAUNCH);
+    if (d > w.maxR) continue;
+    if (w.exo && tmp.y < 100) continue;
+    if (!w.exo && tmp.y > 90) continue;
+    if (4 + d * 1.18 / w.v <= tI - st.t) return { tI, point: tmp.clone() };
+  }
+  return null;
+}
+function step(st, dt) {
+  st.t += dt;
+  const mode = st.mode;
+  for (const th of st.threats) {
+    if (!th.alive) continue;
+    const p = th.d.path;
+    if (st.t >= p.t0) p.pos(st.t, th.pos); else th.pos.set(0, -99, 0);
+    if (st.t >= p.t0 + p.T && th.stage < 6) {
+      th.alive = false; th.outcome = th.d.id === "B1" ? "Out of range" : "Hit ship";
+      say(st, `${th.d.name}: ${th.outcome.toLowerCase()}`);
+    }
+  }
+  const live = th => th.alive && th.stage >= 1;
+  if (mode === "spy6") {
+    // digital beamforming: every track gets its own look every 0.5 s; each face completes a search frame every 1 s
+    for (const th of st.threats) if (live(th) && st.t >= th.nextUpd) { look(st, th, faceOf(th.pos)); th.nextUpd += 0.25; }
+    for (let f = 0; f < 4; f++) if (st.t >= st.nextSearch6[f]) {
+      st.nextSearch6[f] += 1.0;
+      for (const th of st.threats) if (th.alive && th.stage === 0 && st.t >= th.d.path.t0 && faceOf(th.pos) === f && covered(th, mode)) detect(st, th);
+    }
+  } else {
+    // one beam per face, 0.1 s per dwell: 2 of every 10 dwells go to tracks, the rest to search; a search frame needs 10 search dwells
+    for (const face of st.faces) {
+      face.clock += dt;
+      while (face.clock >= 0.1) {
+        face.clock -= 0.1;
+        const mine = st.threats.filter(th => live(th) && faceOf(th.pos) === face.i);
+        const slot = face.slot++ % 10;
+        if (slot < 2 && mine.length) {
+          const th = mine[face.rr++ % mine.length]; look(st, th, face.i);
+        } else {
+          if (++face.searchProg >= 10) {
+            face.searchProg = 0;
+            for (const th of st.threats) if (th.alive && th.stage === 0 && st.t >= th.d.path.t0 && faceOf(th.pos) === face.i && covered(th, mode)) detect(st, th);
+          }
+        }
+      }
+    }
+  }
+  for (const th of st.threats) {
+    if (th.stage === 1 && th.looks >= 3) { th.stage = 2; say(st, `TRACK ${th.d.tn} firm, ${(th.pos.length() / NM).toFixed(0)} nm`); }
+    if (th.stage === 2 && th.looks >= 6 && st.t >= th.tDet + 4) { th.stage = 3; th.tId = st.t; say(st, `ID ${th.d.tn} HOSTILE ${th.d.cls}`); }
+    const w = WEAPON[th.d.weapon];
+    if (th.stage === 3 && st.t >= th.tId + 2 && th.alive) {
+      if (w.gun) {
+        const r0 = th.pos.distanceTo(w.mount);
+        if (r0 <= w.maxR) {
+          th.stage = 4; th.tLaunch = st.t; th.rounds = [];
+          if (w.rounds) {
+            for (let k = 0; k < w.rounds; k++) {
+              const tf = st.t + k * w.rate;
+              let ti = tf + th.d.path.pos(tf, tmp).distanceTo(w.mount) / w.v; ti = tf + th.d.path.pos(ti, tmp).distanceTo(w.mount) / w.v;
+              const p = th.d.path.pos(ti, V(0, 0, 0));
+              if (k < w.rounds - 1) p.add(V((k - 1) * 0.04, 0.03 + k * 0.012, 0.035 * (k % 2 ? 1 : -1))); // near misses, then a hit
+              th.rounds.push({ tf, ti, p });
+            }
+            th.tInt = th.rounds[w.rounds - 1].ti;
+            say(st, `ENGAGE ${th.d.tn}: 5-inch gun opens fire, ${(r0 / NM).toFixed(1)} nm`);
+          } else {
+            th.tInt = st.t + w.burst + r0 / w.v;
+            say(st, `ENGAGE ${th.d.tn}: Phalanx CIWS opens fire, ${Math.round(r0 * 1000)} m`);
+          }
+          th.intPoint = th.d.path.pos(th.tInt, V(0, 0, 0));
+        }
+      } else {
+        const pl = plan(st, th);
+        if (pl) { th.stage = 4; th.tLaunch = st.t; th.tInt = pl.tI; th.intPoint = pl.point; say(st, `ENGAGE ${th.d.tn}: ${th.d.weapon} away from Mk 41 VLS`); }
+      }
+    }
+    if (th.stage === 4 && st.t >= th.tLaunch + (w.gun ? 0.3 : 4)) { th.stage = 5; if (!w.gun) say(st, `MIDCOURSE ${th.d.weapon} on uplink to ${th.d.tn}`); }
+    if (th.stage === 5 && st.t >= th.tInt - (w.gun ? 0.5 : 4)) { th.stage = 6; if (!w.gun) say(st, `TERMINAL ${th.d.weapon} homing on ${th.d.tn}`); }
+    if (th.stage === 6 && st.t >= th.tInt && !th.deadAt) {
+      th.alive = false; th.deadAt = st.t;
+      const alt = th.intPoint.y < 1 ? `${Math.round(th.intPoint.y * 1000)} m` : `${th.intPoint.y.toFixed(0)} km`;
+      const rng = th.intPoint.length() < 5 ? `${Math.round(th.intPoint.length() * 1000)} m` : `${(th.intPoint.length() / NM).toFixed(0)} nm`;
+      say(st, `INTERCEPT ${th.d.tn} by ${w.label || th.d.weapon} at ${rng}, ${alt} altitude${th.intPoint.y >= 100 ? " (in space)" : ""}`);
+    }
+    if (th.stage === 6 && th.deadAt && st.t >= th.deadAt + 3) { th.stage = 7; th.outcome = "Destroyed"; say(st, `ASSESS ${th.d.tn}: kill`); }
+  }
+}
+function doneAt(st) { return st.threats.every(th => th.outcome) && st.t > Math.max(...st.threats.map(th => (th.deadAt || 0))) + 8; }
+function headless(mode) { const st = newState(mode); while (st.t < END_T && !doneAt(st)) step(st, 0.05); return st; }
+const RUNS = { spy1: headless("spy1"), spy6: headless("spy6") };
+
+// =============================================================== renderer, sky, light
+const canvas = document.getElementById("scene"), view = document.getElementById("view");
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, logarithmicDepthBuffer: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
+renderer.outputEncoding = THREE.sRGBEncoding;
+const scene = new THREE.Scene();
+const HAZE = new THREE.Color(0xa9bccb);
+scene.fog = new THREE.FogExp2(HAZE, 0.0024);
+const camera = new THREE.PerspectiveCamera(45, 1, 0.003, 30000);
+// ---- game-style third-person camera: orbit a focus point; looking up slides the camera down to the
+// water and keeps tilting, so you can look straight up at a missile overhead
+const rig = { target: V(0, 0.012, 0), yaw: 0.7, pitch: 0.15, dist: 0.34 };
+const MIN_Y = 0.0025;
+const rigOff = V(0, 0, 0), lookP = V(0, 0, 0);
+const clampN = (v, a, b) => Math.min(b, Math.max(a, v));
+function rigFrom(pos, target) { const o = pos.clone().sub(target), d = o.length(); return { target: target.clone(), dist: d, pitch: Math.asin(o.y / d), yaw: Math.atan2(o.x, o.z) }; }
+function applyRig() {
+  rig.pitch = clampN(rig.pitch, -1.45, 1.52); rig.dist = clampN(rig.dist, 0.02, 3000);
+  const cp = Math.cos(rig.pitch);
+  rigOff.set(cp * Math.sin(rig.yaw), Math.sin(rig.pitch), cp * Math.cos(rig.yaw));
+  const pos = camera.position.copy(rig.target).addScaledVector(rigOff, rig.dist);
+  if (pos.y < MIN_Y) {
+    // camera has reached the water: park it on the surface at the pitch where it touched down,
+    // and keep tilting the view upward instead of sinking (like a third-person game camera)
+    const sc = clampN((MIN_Y - rig.target.y) / rig.dist, -1, 1), hc = Math.sqrt(1 - sc * sc);
+    pos.set(rig.target.x + Math.sin(rig.yaw) * rig.dist * hc, MIN_Y, rig.target.z + Math.cos(rig.yaw) * rig.dist * hc);
+  }
+  lookP.copy(pos).addScaledVector(rigOff, -1); camera.lookAt(lookP);
+}
+const ptrs = new Map(); let pinch = null;
+canvas.style.touchAction = "none";
+canvas.addEventListener("contextmenu", e => e.preventDefault());
+canvas.addEventListener("pointerdown", e => { canvas.setPointerCapture(e.pointerId); ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY, pan: e.button === 2 || e.button === 1 || e.shiftKey }); camAnim = null; });
+canvas.addEventListener("pointermove", e => {
+  const q = ptrs.get(e.pointerId); if (!q) return;
+  const dx = e.clientX - q.x, dy = e.clientY - q.y; q.x = e.clientX; q.y = e.clientY;
+  if (ptrs.size === 1) { if (q.pan) panBy(dx, dy); else { rig.yaw -= dx * 0.005; rig.pitch += dy * 0.005; } }
+  else if (ptrs.size === 2) { const [a, b] = [...ptrs.values()], d = Math.hypot(a.x - b.x, a.y - b.y); if (pinch) rig.dist *= pinch / d; pinch = d; }
+});
+const endPtr = e => { ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = null; };
+canvas.addEventListener("pointerup", endPtr); canvas.addEventListener("pointercancel", endPtr);
+canvas.addEventListener("wheel", e => { e.preventDefault(); rig.dist *= Math.pow(1.0015, e.deltaY); camAnim = null; }, { passive: false });
+function panBy(dx, dy) {
+  follow = null;
+  const sc = rig.dist * 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) / Math.max(view.clientHeight, 1);
+  const fx = -Math.sin(rig.yaw), fz = -Math.cos(rig.yaw), rx = Math.cos(rig.yaw), rz = -Math.sin(rig.yaw);
+  rig.target.x += -rx * dx * sc + fx * dy * sc; rig.target.z += -rz * dx * sc + fz * dy * sc;
+}
+
+const sun = V(0, 0, 0);
+{
+  sun.setFromSphericalCoords(1, THREE.MathUtils.degToRad(90 - 24), THREE.MathUtils.degToRad(215));
+  const sky = new THREE.Mesh(new THREE.SphereGeometry(15000, 32, 16), new THREE.ShaderMaterial({
+    side: THREE.BackSide, depthWrite: false, fog: false, toneMapped: false,
+    uniforms: { sunDir: { value: sun.clone() } },
+    vertexShader: `
+      #include <common>
+      #include <logdepthbuf_pars_vertex>
+      varying vec3 vDir;
+      void main(){ vDir = normalize(position); vec4 w = modelMatrix * vec4(position,1.0); gl_Position = projectionMatrix * viewMatrix * w;
+        #include <logdepthbuf_vertex>
+      }`,
+    fragmentShader: `
+      #include <common>
+      #include <logdepthbuf_pars_fragment>
+      uniform vec3 sunDir; varying vec3 vDir;
+      void main(){
+        #include <logdepthbuf_fragment>
+        float h = max(vDir.y, 0.0);
+        vec3 zen = vec3(0.16, 0.36, 0.62), hor = vec3(0.70, 0.78, 0.84);
+        vec3 col = mix(hor, zen, pow(h, 0.55));
+        float sd = max(dot(normalize(vDir), normalize(sunDir)), 0.0);
+        col += vec3(1.0, 0.86, 0.66) * (pow(sd, 8.0) * 0.25 + pow(sd, 1500.0) * 4.0);
+        if (vDir.y < 0.0) col = vec3(0.58, 0.66, 0.72);
+        gl_FragColor = vec4(col, 1.0);
+      }`,
+  }));
+  sky.renderOrder = -1; scene.add(sky);
+}
+const sunLight = new THREE.DirectionalLight(0xfff1dc, 2.4); sunLight.position.copy(sun).multiplyScalar(100); scene.add(sunLight);
+scene.add(new THREE.HemisphereLight(0xbcd2e8, 0x2a3f52, 0.9));
+
+// =============================================================== ocean (procedural shader)
+const ocean = new THREE.Mesh(new THREE.PlaneGeometry(8000, 8000, 1, 1), new THREE.ShaderMaterial({
+  uniforms: { time: { value: 0 }, sunDir: { value: sun.clone() }, camPos: { value: V(0, 0, 0) } },
+  vertexShader: `
+    #include <common>
+    #include <logdepthbuf_pars_vertex>
+    varying vec3 vW;
+    void main(){ vec4 w = modelMatrix * vec4(position,1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w;
+      #include <logdepthbuf_vertex>
+    }`,
+  fragmentShader: `
+    #include <common>
+    #include <logdepthbuf_pars_fragment>
+    uniform float time; uniform vec3 sunDir; uniform vec3 camPos; varying vec3 vW;
+    vec2 wave(vec2 p, vec2 dir, float len, float amp, float spd){ float k = 6.2831/len; float ph = dot(p,dir)*k + time*spd*k; return dir * amp * k * cos(ph); }
+    void main(){
+      #include <logdepthbuf_fragment>
+      vec2 p = vW.xz; float d = length(vW - camPos);
+      vec2 g = vec2(0.0);
+      g += wave(p, normalize(vec2(0.8,0.6)), 0.090, 0.0016, 0.012);
+      g += wave(p, normalize(vec2(-0.45,0.89)), 0.071, 0.0014, 0.010);
+      g += wave(p, normalize(vec2(0.99,0.12)), 0.043, 0.0010, 0.008) * exp(-d / 2.0);
+      g += wave(p, normalize(vec2(0.3,-0.95)), 0.051, 0.0018, 0.009);
+      g += wave(p, normalize(vec2(-0.7,0.7)), 0.033, 0.0011, 0.007) * exp(-d / 1.2);
+      g += wave(p, normalize(vec2(0.95,-0.2)), 0.017, 0.0006, 0.005) * exp(-d / 0.6);
+      g *= 0.5 * exp(-d / 1.6);
+      vec3 n = normalize(vec3(-g.x, 1.0, -g.y));
+      vec3 v = normalize(camPos - vW);
+      float fres = 0.02 + 0.98 * pow(1.0 - max(dot(n, v), 0.0), 5.0);
+      vec3 deep = vec3(0.012, 0.055, 0.085), skyc = mix(vec3(0.62,0.71,0.78), vec3(0.30,0.46,0.62), clamp(reflect(-v,n).y*2.5,0.0,1.0));
+      vec3 col = mix(deep, skyc, fres);
+      vec3 h = normalize(sunDir + v); col += vec3(1.0,0.93,0.82) * pow(max(dot(n,h),0.0), 700.0) * 0.9;
+      col += vec3(1.0,0.93,0.82) * pow(max(dot(n,h),0.0), 40.0) * 0.06;
+      float fog = 1.0 - exp(-d * 0.0024);
+      col = mix(col, vec3(0.58,0.66,0.72), fog);
+      gl_FragColor = vec4(col, 1.0);
+    }`,
+}));
+ocean.rotation.x = -Math.PI / 2; scene.add(ocean);
+
+// =============================================================== Yemen coast (terrain)
+function noise2(x, z) { // cheap value noise
+  const xi = Math.floor(x), zi = Math.floor(z), xf = x - xi, zf = z - zi;
+  const h = (a, b) => { const s = Math.sin(a * 127.1 + b * 311.7) * 43758.5453; return s - Math.floor(s); };
+  const u = xf * xf * (3 - 2 * xf), w = zf * zf * (3 - 2 * zf);
+  return (h(xi, zi) * (1 - u) + h(xi + 1, zi) * u) * (1 - w) + (h(xi, zi + 1) * (1 - u) + h(xi + 1, zi + 1) * u) * w;
+}
+const fbm = (x, z) => { let a = 0, f = 1, amp = 0.5; for (let i = 0; i < 5; i++) { a += amp * noise2(x * f, z * f); f *= 2.1; amp *= 0.5; } return a; };
+const coastX = z => 128 + 16 * Math.sin(z / 95) + 7 * Math.sin(z / 29 + 1.3) + 3 * Math.sin(z / 9);
+{
+  const W = 420, L = 1700, geo = new THREE.PlaneGeometry(W, L, 210, 600);
+  geo.rotateX(-Math.PI / 2);
+  const pos = geo.attributes.position, col = [];
+  const sand = new THREE.Color(0xc2a77f), dry = new THREE.Color(0x7d6248), rock = new THREE.Color(0x4a3b30), plain = new THREE.Color(0xa38a66), c = new THREE.Color();
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i) + 100 + W / 2, z = pos.getZ(i) - 200;
+    const u = x - coastX(z);
+    let h;
+    if (u < 0) h = Math.max(-0.4, u * 0.004);
+    else {
+      const ramp = Math.min(u / 38, 1), n = fbm(x / 18, z / 18), r = Math.abs(fbm(x / 7 + 7, z / 7) - 0.5) * 2;
+      h = 0.01 + ramp * ramp * (3.0 * n + 1.2 * (1 - r)) + (u < 4 ? 0 : 0.08 * fbm(x, z));
+    }
+    pos.setY(i, h);
+    if (h < 0.02) c.copy(sand); else if (h < 0.3) c.copy(plain).lerp(dry, h / 0.3); else c.copy(dry).lerp(rock, Math.min((h - 0.3) / 1.6, 1));
+    col.push(c.r, c.g, c.b);
+  }
+  geo.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
+  geo.computeVertexNormals();
+  const land = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true }));
+  land.position.set(100 + W / 2, 0, -200); scene.add(land);
+}
+
+// =============================================================== models (built in meters, scaled to km)
+const M = 0.001;
+const mat = (c, o = {}) => new THREE.MeshStandardMaterial(Object.assign({ color: c, roughness: 0.75, metalness: 0.1 }, o));
+const HAZE_GRAY = mat(0x7a8188), DECK = mat(0x4c5257), DARK = mat(0x2a2f33), ARRAY = mat(0x3b4247, { roughness: 0.5 });
+function box(g, w, h, d, x, y, z, m) { const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); b.position.set(x, y, z); g.add(b); return b; }
+
+function taperedPrism(pts, y0, h, topScale, m, cx = 0, cz = 0) {
+  // pts: plan outline [x,z] (counter-clockwise seen from above); sides lean inward by topScale
+  const n = pts.length, v = [], idx = [];
+  pts.forEach(([x, z]) => v.push(x, y0, z));
+  pts.forEach(([x, z]) => v.push(cx + (x - cx) * topScale, y0 + h, cz + (z - cz) * topScale));
+  for (let i = 0; i < n; i++) { const j = (i + 1) % n; idx.push(i, j, n + i, j, n + j, n + i); }
+  for (let i = 1; i < n - 1; i++) idx.push(n, n + i + 1, n + i);
+  const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(v, 3)); g.setIndex(idx);
+  const ng = g.toNonIndexed(); ng.computeVertexNormals();
+  const mesh = new THREE.Mesh(ng, m); mesh.material.side = THREE.DoubleSide; return mesh;
+}
+const chamfered = (x0, x1, hw, c) => [[x1 - c, -hw], [x1, -hw + c], [x1, hw - c], [x1 - c, hw], [x0 + c, hw], [x0, hw - c], [x0, -hw + c], [x0 + c, -hw]];
+function buildShip() {
+  const g = new THREE.Group();
+  const HULL = new THREE.MeshStandardMaterial({ color: 0x737a81, roughness: 0.85, flatShading: true, side: THREE.DoubleSide });
+  const SUP = new THREE.MeshStandardMaterial({ color: 0x858c93, roughness: 0.8, flatShading: true, side: THREE.DoubleSide });
+  const NONSKID = new THREE.MeshStandardMaterial({ color: 0x3e4347, roughness: 0.95 });
+  const BLACK = new THREE.MeshStandardMaterial({ color: 0x1d2023, roughness: 0.7 });
+  const ARR = new THREE.MeshStandardMaterial({ color: 0x4a5157, roughness: 0.55, metalness: 0.2 });
+  // ---- hull: lofted stations, bow at +x. Flare and sheer forward, transom stern.
+  const N = 64, L = 155, xs = -L / 2;
+  const bw = t => 9.9 * (t < 0.04 ? 0.84 : t < 0.55 ? 1 : Math.max(0.0, Math.cos((t - 0.55) / 0.45 * Math.PI / 2) ** 0.9));
+  const flare = t => 1 + 0.35 * Math.max(0, (t - 0.5) / 0.5) ** 1.5;
+  const deckY = t => 6.6 + 3.0 * Math.max(0, (t - 0.45) / 0.55) ** 1.6;
+  const rake = t => 7.5 * Math.max(0, (t - 0.88) / 0.12) ** 2;          // stem overhang, metres at deck
+  const prof = [[1, 1], [0.985, 0.82], [0.0, 0], [-0.08, -0.55], [-0.45, -0.92], [-1, -1]]; // [breadth key, height key]
+  const verts = [], idx = [], R = prof.length * 2;
+  for (let i = 0; i <= N; i++) {
+    const t = i / N, x0 = xs + t * L, b = bw(t), bd = Math.max(b * flare(t), t > 0.985 ? 0.15 : 0.6), dy = deckY(t), draft = 6.3 * (t > 0.92 ? Math.max(0.2, 1 - (t - 0.92) * 9) : 1);
+    const pt = (k, hk) => { const y = hk >= 0 ? hk * dy : hk * draft; const half = hk > 0 ? b + (bd - b) * hk : b * (1 + k) ; return [x0 + rake(t) * Math.max(y, 0) / dy - (hk < 0 ? 0 : 0), y, half]; };
+    const side = prof.map(([k, hk]) => { const y = hk >= 0 ? hk * dy : hk * draft; let half; if (hk > 0) half = b + (bd - b) * hk; else if (hk === 0) half = b; else half = b * (1 + k); return [x0 + rake(t) * Math.max(y, 0) / dy, y, half]; });
+    side.forEach(p => verts.push(p[0], p[1], -p[2]));
+    side.slice().reverse().forEach(p => verts.push(p[0], p[1], p[2]));
+  }
+  for (let i = 0; i < N; i++) for (let s = 0; s < R - 1; s++) { const a = i * R + s, b2 = a + 1, c = a + R, d = c + 1; idx.push(a, c, b2, b2, c, d); }
+  for (let i = 0; i < N; i++) { const a = i * R, b2 = i * R + R - 1, c = a + R, d = b2 + R; idx.push(a, b2, c, b2, d, c); }
+  { const a = 0; for (let s = 1; s < R - 1; s++) idx.push(a, s, s + 1); } // transom
+  const hg = new THREE.BufferGeometry(); hg.setAttribute("position", new THREE.Float32BufferAttribute(verts, 3)); hg.setIndex(idx);
+  const hull = new THREE.Mesh(hg.toNonIndexed(), HULL); hull.geometry.computeVertexNormals(); g.add(hull);
+  // deck surfaces (nonskid) as a thin slab following sheer
+  for (let i = 0; i < N; i++) {
+    const t = (i + 0.5) / N, b = Math.max(bw(t) * flare(t), 0.6) * 0.97, x0 = xs + t * L + rake(t);
+    if (t > 0.985) continue;
+    const s = new THREE.Mesh(new THREE.BoxGeometry(L / N + 0.05, 0.15, 2 * b), NONSKID); s.position.set(x0, deckY(t) + 0.05, 0); g.add(s);
+  }
+  // boot top (waterline band)
+  { const bt = new THREE.Mesh(new THREE.BoxGeometry(L * 0.9, 0.7, 19.9), BLACK); bt.position.set(-5, 0.2, 0); g.add(bt); }
+  // ---- forward superstructure: chamfered, inward-sloping block; SPY-6 arrays on the four chamfers
+  const fwd = taperedPrism(chamfered(-6, 30, 8.6, 5.2), 8.4, 11.5, 0.88, SUP, 12, 0); g.add(fwd);
+  const lvl2 = taperedPrism(chamfered(-1, 24, 7.0, 3.4), 19.9, 4.4, 0.86, SUP, 11, 0); g.add(lvl2);
+  { const w = new THREE.Mesh(new THREE.BoxGeometry(0.25, 1.1, 9.0), BLACK); w.position.set(23.4, 22.6, 0); w.rotation.z = 0.14; g.add(w); } // bridge windows
+  const arrayAt = (cx, cz, nx, nz) => {
+    const p = new THREE.Group();
+    const face = new THREE.Mesh(new THREE.BoxGeometry(4.3, 4.3, 0.35), ARR); p.add(face);
+    const frame = new THREE.Mesh(new THREE.BoxGeometry(4.7, 4.7, 0.2), SUP); frame.position.z = -0.12; p.add(frame);
+    for (let k = 1; k < 6; k++) { const l = new THREE.Mesh(new THREE.BoxGeometry(4.3, 0.05, 0.38), BLACK); l.position.y = -2.15 + k * 4.3 / 6; p.add(l); const l2 = l.clone(); l2.rotation.z = Math.PI / 2; l2.position.set(-2.15 + k * 4.3 / 6, 0, 0); p.add(l2); }
+    p.position.set(cx, 15.0, cz); p.lookAt(cx + nx, 15.0 + 0.2, cz + nz); g.add(p);
+  };
+  const s2 = Math.SQRT1_2, ix = 0.95;
+  arrayAt(30 - 2.6 * ix, 8.6 - 2.6 * ix,  s2, s2); arrayAt(30 - 2.6 * ix, -8.6 + 2.6 * ix,  s2, -s2);
+  arrayAt(-6 + 2.6 * ix, 8.6 - 2.6 * ix, -s2, s2); arrayAt(-6 + 2.6 * ix, -8.6 + 2.6 * ix, -s2, -s2);
+  // ---- mast: tapered, raked aft, with yards and top antennas
+  { const mast = taperedPrism(chamfered(4, 10, 2.2, 0.8), 24, 14, 0.45, SUP, 6.5, 0); mast.rotation.z = 0.12; mast.position.set(2.6, 0, 0); g.add(mast);
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.25, 9, 8), BLACK); pole.position.set(4.6, 41, 0); g.add(pole);
+    const yard = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.4, 10), SUP); yard.position.set(5.2, 34, 0); g.add(yard);
+    const plat = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.5, 3.2), SUP); plat.position.set(4.9, 37, 0); g.add(plat);
+    const q9 = new THREE.Mesh(new THREE.BoxGeometry(0.6, 1.2, 3.4), BLACK); q9.position.set(4.9, 38.2, 0); g.add(q9); }
+  // ---- stacks (raked, with black caps)
+  const stack = x => { const s = taperedPrism(chamfered(x - 4, x + 4, 3.2, 1.2), 8.4, 11, 0.78, SUP, x, 0); s.rotation.z = -0.05; g.add(s);
+    const cap = taperedPrism(chamfered(x - 3.6, x + 2.6, 2.4, 0.9), 19.2, 1.0, 0.95, BLACK, x, 0); cap.rotation.z = -0.05; g.add(cap); };
+  stack(-12); stack(-37);
+  { const mid = taperedPrism(chamfered(-40, -8, 6.5, 2.5), 6.6, 3.0, 0.95, SUP, -24, 0); g.add(mid); }
+  // ---- aft superstructure with twin hangars, flight deck at the stern
+  { const aft = taperedPrism(chamfered(-64, -43, 8.0, 3.0), 6.6, 7.6, 0.92, SUP, -53, 0); g.add(aft);
+    [-3.6, 3.6].forEach(z => { const d = new THREE.Mesh(new THREE.BoxGeometry(0.2, 5.4, 6.2), BLACK); d.position.set(-64.2, 9.6, z); g.add(d); });
+    const pad = new THREE.Mesh(new THREE.RingGeometry(3.6, 3.9, 32), new THREE.MeshBasicMaterial({ color: 0xd8d8d8 })); pad.rotation.x = -Math.PI / 2; pad.position.set(-71, 6.82, 0); g.add(pad); }
+  // ---- Phalanx CIWS on the aft superstructure
+  { const WH = new THREE.MeshStandardMaterial({ color: 0xe9ebe6, roughness: 0.6 });
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.3, 1.6, 14), SUP); base.position.set(-56, 15.0, 0); g.add(base);
+    const dome = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.75, 1.6, 14), WH); dome.position.set(-56, 16.8, 0); g.add(dome);
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.75, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), WH); cap.position.set(-56, 17.6, 0); g.add(cap);
+    const brl = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 2.4, 8), BLACK); brl.rotation.z = Math.PI / 2; brl.position.set(-57.6, 16.2, 0); g.add(brl); }
+  // ---- forward VLS (32 cells) and 5-inch gun
+  { const v = new THREE.Mesh(new THREE.BoxGeometry(8.5, 0.35, 5.8), BLACK); v.position.set(40, deckY(0.76) + 0.25, 0); g.add(v);
+    for (let a = 0; a < 4; a++) for (let b2 = 0; b2 < 8; b2++) { const c = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.1, 1.1), NONSKID); c.position.set(36.6 + a * 2.2, deckY(0.76) + 0.45, -2.4 + b2 * 0.69); c.scale.z = 0.55; g.add(c); } }
+  { const gy = deckY(0.86); const tur = taperedPrism(chamfered(50, 57, 2.6, 1.4), gy, 2.6, 0.7, SUP, 54, 0); g.add(tur);
+    const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.2, 10, 8), BLACK); bar.rotation.z = -Math.PI / 2 + 0.06; bar.position.set(61.5, gy + 1.5, 0); g.add(bar); }
+  // ---- hull number on both bows
+  { const c = document.createElement("canvas"); c.width = 256; c.height = 128; const x = c.getContext("2d"); x.fillStyle = "#f1f1ec"; x.font = "bold 110px Arial"; x.textAlign = "center"; x.textBaseline = "middle"; x.fillText("128", 128, 70);
+    const tex = new THREE.CanvasTexture(c); const m = new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide });
+    [1, -1].forEach(sgn => { const p = new THREE.Mesh(new THREE.PlaneGeometry(6, 3), m); const t = 0.86; p.position.set(xs + t * L + 2.5, 5.0, sgn * (bw(t) * flare(t) * 0.9 + 0.3)); p.rotation.y = sgn > 0 ? 0 : Math.PI; p.rotation.y += sgn * -0.12; g.add(p); }); }
+  g.scale.setScalar(M); g.rotation.y = Math.PI / 2;
+  return g;
+}
+
+const ship = buildShip(); scene.add(ship);
+const ringTags = [];
+function rangeRing(km, color, label) {
+  const pts = []; for (let a = 0; a <= 256; a++) { const t = a / 256 * Math.PI * 2; pts.push(Math.sin(t) * km, 0.3, -Math.cos(t) * km); }
+  const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
+  const l = new THREE.Line(g, new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.85, fog: false })); scene.add(l);
+  ringTags.push({ label, p: V(Math.sin(-0.5) * km, 0.3, -Math.cos(-0.5) * km), color });
+  return l;
+}
+rangeRing(rangeFor(0.1, "spy1"), 0xb8c2ca, "SPY-1D detection range, 0.1 m² target");
+rangeRing(rangeFor(0.1, "spy6"), 0x59b8ff, "SPY-6 detection range, same target (2.4× farther)");
+// foam around the hull
+{
+  const foam = new THREE.Mesh(new THREE.RingGeometry(0.004, 0.012, 40), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.18, depthWrite: false }));
+  foam.rotation.x = -Math.PI / 2; foam.scale.set(0.9, 7.5, 1); foam.position.y = 0.0002; scene.add(foam);
+}
+
+function cylAlongZ(rTop, rBot, len, m, seg = 12) { const c = new THREE.Mesh(new THREE.CylinderGeometry(rTop, rBot, len, seg), m); c.rotation.x = Math.PI / 2; return c; }
+function fins(g, z, span, chord, m, n = 4, off = 0) {
+  for (let i = 0; i < n; i++) { const f = new THREE.Mesh(new THREE.BoxGeometry(span, 0.04, chord), m); const a = off + i * Math.PI * 2 / n; f.position.set(Math.cos(a) * span / 2, Math.sin(a) * span / 2, z); f.rotation.z = a; g.add(f); }
+}
+function plume(len, rad, color = 0xffa040) {
+  const m = new THREE.Mesh(new THREE.ConeGeometry(rad, len, 10, 1, true), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+  m.rotation.x = -Math.PI / 2; return m;
+}
+const WHITE = mat(0xe4e4df), OLIVE = mat(0x6d7255), KHAKI = mat(0xb5ad95), RVM = mat(0x2b2b2b, { metalness: 0.4 });
+function buildDrone() { // generic delta-wing one-way attack drone, nose +z
+  const g = new THREE.Group();
+  g.add(cylAlongZ(0.22, 0.22, 3.0, KHAKI));
+  const nose = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 8), KHAKI); nose.position.z = 1.5; g.add(nose);
+  const sh = new THREE.Shape(); sh.moveTo(0, 1.1); sh.lineTo(1.25, -1.45); sh.lineTo(-1.25, -1.45); sh.lineTo(0, 1.1);
+  const wing = new THREE.Mesh(new THREE.ExtrudeGeometry(sh, { depth: 0.05, bevelEnabled: false }), KHAKI); wing.rotation.x = Math.PI / 2; g.add(wing);
+  [-1.2, 1.2].forEach(x => { const t = box(g, 0.04, 0.5, 0.6, x, 0.2, -1.2, KHAKI); });
+  const prop = new THREE.Mesh(new THREE.CircleGeometry(0.55, 16), new THREE.MeshBasicMaterial({ color: 0x222222, transparent: true, opacity: 0.35, side: THREE.DoubleSide })); prop.position.z = -1.55; g.add(prop);
+  return { g, len: 3.5 };
+}
+function buildCruise() {
+  const g = new THREE.Group();
+  g.add(cylAlongZ(0.25, 0.25, 5, WHITE));
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.25, 1.1, 12), WHITE); nose.rotation.x = Math.PI / 2; nose.position.z = 3.05; g.add(nose);
+  const w = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.04, 0.5), WHITE); w.position.z = 0.2; g.add(w);
+  fins(g, -2.3, 0.9, 0.4, WHITE, 4, Math.PI / 4);
+  return { g, len: 6 };
+}
+function buildBallistic(len) {
+  const g = new THREE.Group(), body = new THREE.Group(), rv = new THREE.Group();
+  body.add(cylAlongZ(0.45, 0.45, len * 0.82, OLIVE));
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.45, len * 0.18, 14), OLIVE); nose.rotation.x = Math.PI / 2; nose.position.z = len * 0.5; body.add(nose);
+  fins(body, -len * 0.38, 1.6, 1.0, OLIVE, 4);
+  const pl = plume(len * 1.6, 0.6); pl.position.z = -len * 0.41 - len * 0.8; body.add(pl); body.userData.plume = pl;
+  const cone = new THREE.Mesh(new THREE.ConeGeometry(0.42, 2.6, 16), RVM); cone.rotation.x = Math.PI / 2; rv.add(cone);
+  g.add(body, rv); rv.visible = false;
+  return { g, len, body, rv };
+}
+function buildInterceptor(len) {
+  const g = new THREE.Group();
+  g.add(cylAlongZ(0.17, 0.17, len, WHITE));
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.17, 0.7, 10), WHITE); nose.rotation.x = Math.PI / 2; nose.position.z = len / 2 + 0.35; g.add(nose);
+  fins(g, -len / 2 + 0.3, 0.75, 0.5, WHITE, 4, Math.PI / 4); fins(g, 0.4, 0.5, 0.6, WHITE, 4, Math.PI / 4);
+  const pl = plume(len * 1.4, 0.3, 0xffc070); pl.position.z = -len / 2 - len * 0.7; g.add(pl); g.userData.plume = pl;
+  return { g, len };
+}
+
+// trails (smoke)
+function makeTrail(color, opacity, n = 400) {
+  const geo = new THREE.BufferGeometry(); geo.setAttribute("position", new THREE.Float32BufferAttribute(new Float32Array(n * 3), 3)); geo.setDrawRange(0, 0);
+  const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color, transparent: true, opacity, depthWrite: false }));
+  line.frustumCulled = false; scene.add(line); return { line, pts: [], n };
+}
+function trailPush(tr, p) { tr.pts.push(p.x, p.y, p.z); if (tr.pts.length > tr.n * 3) tr.pts.splice(0, 3); const a = tr.line.geometry.attributes.position; a.array.set(tr.pts); a.needsUpdate = true; tr.line.geometry.setDrawRange(0, tr.pts.length / 3); }
+function trailClear(tr) { tr.pts.length = 0; tr.line.geometry.setDrawRange(0, 0); }
+
+const objs = THREATS.map(d => {
+  const m = d.kind === "drone" ? buildDrone() : d.kind === "cruise" ? buildCruise() : buildBallistic(d.len);
+  scene.add(m.g);
+  const w = buildInterceptor(WEAPON[d.weapon].len || 4.7); w.g.visible = false; scene.add(w.g);
+  const flash = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 14), new THREE.MeshBasicMaterial({ color: 0xffd9a0, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+  const smoke = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), new THREE.MeshLambertMaterial({ color: 0x555555, transparent: true, opacity: 0, depthWrite: false }));
+  scene.add(flash, smoke);
+  return { m, w, flash, smoke,
+    trail: makeTrail(d.kind === "bm" ? 0xf2efe8 : 0xd9dde0, d.kind === "drone" ? 0.0 : 0.5),
+    wTrail: makeTrail(0xf5f5f5, 0.7) };
+});
+
+// gun effects: 5-inch shells + airbursts, CIWS tracer stream, muzzle flashes
+const glow = (c, o = 1) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: o, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, toneMapped: false });
+const gunFx = THREATS.map(d => {
+  const w = WEAPON[d.weapon]; if (!w.gun) return null;
+  const fx = { muzzle: new THREE.Mesh(new THREE.SphereGeometry(1, 10, 8), glow(0xffc46b)), shells: [], puffs: [], flashes: [] };
+  fx.muzzle.visible = false; scene.add(fx.muzzle);
+  for (let k = 0; k < (w.rounds || 0); k++) {
+    const sh = new THREE.Mesh(new THREE.SphereGeometry(1, 8, 6), glow(0xffe2a0)); sh.visible = false; scene.add(sh); fx.shells.push(sh);
+    const pf = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 2), new THREE.MeshBasicMaterial({ color: 0x232323, transparent: true, opacity: 0, depthWrite: false })); scene.add(pf); fx.puffs.push(pf);
+    const fl = new THREE.Mesh(new THREE.SphereGeometry(1, 10, 8), glow(0xffb060)); fl.visible = false; scene.add(fl); fx.flashes.push(fl);
+  }
+  if (!w.rounds) {
+    const N = 26, geo = new THREE.BufferGeometry(); geo.setAttribute("position", new THREE.Float32BufferAttribute(new Float32Array(N * 6), 3));
+    fx.tracers = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: 0xffd27a, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, toneMapped: false }));
+    fx.tracers.frustumCulled = false; fx.tracers.visible = false; scene.add(fx.tracers); fx.N = N;
+  }
+  return fx;
+});
+const camScale = (p, k) => Math.max(0.0012, camera.position.distanceTo(p) * k);
+function renderGun(th, i) {
+  const fx = gunFx[i]; if (!fx) return;
+  const w = WEAPON[th.d.weapon], t = st.t, firing = th.stage >= 4 && th.tLaunch != null;
+  if (w.rounds) {
+    let flashOn = false;
+    th.rounds && th.rounds.forEach((r, k) => {
+      const sh = fx.shells[k], pf = fx.puffs[k], fl = fx.flashes[k];
+      if (firing && t >= r.tf && t < r.ti) { sh.visible = true; sh.position.lerpVectors(w.mount, r.p, (t - r.tf) / (r.ti - r.tf)); sh.scale.setScalar(camScale(sh.position, 0.0035)); }
+      else sh.visible = false;
+      if (firing && t >= r.tf && t < r.tf + 0.35) flashOn = true;
+      const age = t - r.ti;
+      if (firing && age >= 0 && age < 9) {
+        pf.position.copy(r.p); pf.scale.setScalar(0.012 + age * 0.006); pf.material.opacity = Math.max(0, 0.75 - age / 12);
+        fl.visible = age < 0.4; fl.position.copy(r.p); fl.scale.setScalar(camScale(r.p, 0.006) * (1 + age * 3)); fl.material.opacity = 1 - age / 0.4;
+      } else { pf.material.opacity = 0; fl.visible = false; }
+    });
+    fx.muzzle.visible = flashOn; fx.muzzle.position.copy(w.mount).add(V(0, 0, -0.002)); fx.muzzle.scale.setScalar(camScale(w.mount, 0.004));
+  } else {
+    const on = firing && t >= th.tLaunch && t < th.tLaunch + w.burst && th.alive;
+    fx.tracers.visible = on; fx.muzzle.visible = on && Math.random() < 0.7;
+    if (on) {
+      const arr = fx.tracers.geometry.attributes.position.array, tgt = th.pos, L = w.mount.distanceTo(tgt);
+      for (let n = 0; n < fx.N; n++) {
+        const f = ((t * 9 + n / fx.N) % 1), a = Math.min(f, 1) * L, b = Math.min(a + 0.045, L);
+        const jit = 0.006 * (1 - f);
+        const d0 = tmp.copy(tgt).sub(w.mount).normalize();
+        const p0 = V(0, 0, 0).copy(w.mount).addScaledVector(d0, a).add(V((Math.random() - 0.5) * jit, (Math.random() - 0.5) * jit, (Math.random() - 0.5) * jit));
+        const p1 = V(0, 0, 0).copy(w.mount).addScaledVector(d0, b);
+        arr.set([p0.x, p0.y, p0.z, p1.x, p1.y, p1.z], n * 6);
+      }
+      fx.tracers.geometry.attributes.position.needsUpdate = true;
+      fx.muzzle.position.copy(w.mount); fx.muzzle.scale.setScalar(camScale(w.mount, 0.003));
+    }
+  }
+}
+
+// radar dwell flashes (pencil beams)
+function beamMat() {
+  return new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false, toneMapped: false,
+    uniforms: { opacity: { value: 0 }, color: { value: new THREE.Color(0x5fb4ff) } },
+    vertexShader: `
+      #include <common>
+      #include <logdepthbuf_pars_vertex>
+      varying float vAlong;
+      void main(){ vAlong = position.z; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0);
+        #include <logdepthbuf_vertex>
+      }`,
+    fragmentShader: `
+      #include <common>
+      #include <logdepthbuf_pars_fragment>
+      uniform float opacity; uniform vec3 color; varying float vAlong;
+      void main(){
+        #include <logdepthbuf_fragment>
+        float a = opacity * (1.0 - smoothstep(0.35, 0.97, vAlong)) * smoothstep(0.0, 0.02, vAlong);
+        gl_FragColor = vec4(color * a, a);
+      }`,
+  });
+}
+const beamGeo = new THREE.ConeGeometry(1, 1, 14, 1, true); beamGeo.translate(0, -0.5, 0); beamGeo.rotateX(-Math.PI / 2);
+const beamPool = Array.from({ length: 90 }, () => {
+  const b = new THREE.Mesh(beamGeo, beamMat());
+  b.visible = false; scene.add(b); return { b, life: 0, max: 0, peak: 0 };
+});
+let beamIdx = 0;
+const trackBeams = THREATS.map(() => { const b = new THREE.Mesh(beamGeo, beamMat()); b.visible = false; scene.add(b); return b; });
+const FACE_POS = [V(0.0062, 0.015, -0.0276), V(0.0062, 0.015, 0.0036), V(-0.0062, 0.015, 0.0036), V(-0.0062, 0.015, -0.0276)];
+const BW = THREE.MathUtils.degToRad(1.6);
+function fireBeam(face, target, track) {
+  const s = beamPool[beamIdx++ % beamPool.length], o = FACE_POS[face];
+  const dir = tmp2.copy(target).sub(o), L = dir.length();
+  s.b.position.copy(o); s.b.lookAt(target);
+  const r = Math.max(L * Math.tan(BW / 2), 0.002);
+  s.b.scale.set(r, r, L); s.b.visible = true;
+  s.max = s.life = track ? 0.3 : 0.2; s.peak = track ? 0.14 : 0.035;
+}
+
+// =============================================================== labels (track brackets)
+const overlay = document.getElementById("overlay");
+function mkTrk() { const e = document.createElement("div"); e.className = "trk"; e.innerHTML = '<div class="box"></div><div class="lbl"></div>'; e.hidden = true; overlay.appendChild(e); return e; }
+const trkEls = THREATS.map(mkTrk), intEls = THREATS.map(mkTrk);
+const ringEls = ringTags.map(r => { const e = document.createElement("div"); e.className = "trk"; e.innerHTML = `<div class="lbl" style="color:#${r.color.toString(16).padStart(6, "0")};margin-left:0;left:0">${r.label}</div>`; e.hidden = true; overlay.appendChild(e); return e; });
+const proj = V(0, 0, 0);
+function toScreen(p) {
+  proj.copy(p).project(camera);
+  if (proj.z > 1 || proj.z < -1) return null;
+  return { x: (proj.x + 1) / 2 * view.clientWidth, y: (1 - proj.y) / 2 * view.clientHeight };
+}
+const focalPx = () => view.clientHeight / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
+function visScale(p, lenM) { const d = camera.position.distanceTo(p); return Math.max(1, 16 * d / (lenM * M * focalPx())); }
+
+// =============================================================== air picture (tactical display)
+const ppi = document.getElementById("ppi");
+const PW = 216;
+function fitCanvas(c) { const dpr = Math.min(window.devicePixelRatio || 1, 2), w = +c.getAttribute("width"), h = +c.getAttribute("height"); c.style.width = w + "px"; c.style.height = h + "px"; c.width = w * dpr; c.height = h * dpr; const x = c.getContext("2d"); x.setTransform(dpr, 0, 0, dpr, 0, 0); return x; }
+const px = fitCanvas(ppi);
+let ppiRange = 250;
+const RANGES = [50, 100, 250, 500];
+document.getElementById("rng").addEventListener("click", e => { ppiRange = RANGES[(RANGES.indexOf(ppiRange) + 1) % RANGES.length]; e.target.textContent = ppiRange + " NM"; });
+document.getElementById("minimize").addEventListener("click", e => { const sc = document.getElementById("scope"), min = sc.classList.toggle("min"); e.target.textContent = min ? "+" : "−"; e.target.setAttribute("aria-expanded", String(!min)); e.target.setAttribute("aria-label", min ? "Show radar display" : "Minimize radar display"); });
+const COLORS = { unknown: "#ffd84d", hostile: "#ff5a4f", friend: "#59b8ff", dead: "#9be38f" };
+function sym(ctx, x, y, kind, color) {
+  ctx.strokeStyle = color; ctx.lineWidth = 1.8; ctx.beginPath();
+  if (kind === "hostile") { ctx.moveTo(x - 6, y); ctx.lineTo(x, y - 6); ctx.lineTo(x + 6, y); }
+  else if (kind === "friend") { ctx.arc(x, y, 5, Math.PI, 0); }
+  else if (kind === "dead") { ctx.moveTo(x - 4, y - 4); ctx.lineTo(x + 4, y + 4); ctx.moveTo(x + 4, y - 4); ctx.lineTo(x - 4, y + 4); }
+  else { ctx.moveTo(x - 5, y); ctx.lineTo(x - 5, y - 5); ctx.lineTo(x + 5, y - 5); ctx.lineTo(x + 5, y); }
+  ctx.stroke();
+}
+function drawScopes(st) {
+  if (document.getElementById("scope").classList.contains("min")) return;
+  const W = PW, c = W / 2, rMax = c - 8, k = rMax / (ppiRange * NM), ctx = px;
+  ctx.fillStyle = "#050b10"; ctx.fillRect(0, 0, W, W);
+  ctx.strokeStyle = "rgba(120,160,190,.25)"; ctx.lineWidth = 1; ctx.font = "10px IBM Plex Mono, monospace"; ctx.fillStyle = "rgba(143,163,178,.85)"; ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+  for (let i = 1; i <= 5; i++) { const r = rMax * i / 5; ctx.beginPath(); ctx.arc(c, c, r, 0, Math.PI * 2); ctx.stroke(); if (i % 2 === 1) ctx.fillText(Math.round(ppiRange * i / 5), c + 3, c - r + 11); }
+  for (let a = 0; a < 360; a += 30) { const r = a * Math.PI / 180; ctx.beginPath(); ctx.moveTo(c + Math.sin(r) * rMax, c - Math.cos(r) * rMax); ctx.lineTo(c + Math.sin(r) * (rMax + 5), c - Math.cos(r) * (rMax + 5)); ctx.stroke(); }
+  ctx.fillText("N", c - 3, 9);
+  ctx.strokeStyle = "rgba(200,170,120,.55)"; ctx.beginPath();
+  for (let z = -900; z <= 900; z += 10) { const X = c + coastX(z) * k, Y = c + z * k; z === -900 ? ctx.moveTo(X, Y) : ctx.lineTo(X, Y); }
+  ctx.stroke();
+  const R = rangeFor(0.1, st.mode) * k; ctx.setLineDash([3, 4]); ctx.strokeStyle = "rgba(89,184,255,.4)"; ctx.beginPath(); ctx.arc(c, c, R, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+  sym(ctx, c, c + 3, "friend", COLORS.friend);
+  st.threats.forEach(th => {
+    if (th.stage < 1 || !th.seen) return;
+    const dead = th.outcome === "Destroyed";
+    if (dead && st.t - th.deadAt > 10) return;
+    const kind = dead ? "dead" : th.stage >= 3 ? "hostile" : "unknown";
+    const p = th.seen, X = c + p.x * k, Y = c + p.z * k, col = COLORS[kind];
+    if (Math.hypot(X - c, Y - c) < rMax - 2) {
+      sym(ctx, X, Y, kind, col);
+      if (!dead) { const v = th.d.path.pos(th.seenAt + 60, V(0, 0, 0)).sub(p).multiplyScalar(k * 0.6); ctx.strokeStyle = col; ctx.beginPath(); ctx.moveTo(X, Y); ctx.lineTo(X + Math.max(-30, Math.min(30, v.x)), Y + Math.max(-30, Math.min(30, v.z))); ctx.stroke(); }
+      ctx.fillStyle = col; ctx.fillText(th.d.tn, X + 7, Y + 11);
+    }
+    if (th.stage >= 4 && th.stage <= 6 && !th.deadAt && !WEAPON[th.d.weapon].gun) {
+      const ip = interceptorPos(th, st.t, V(0, 0, 0)), IX = c + ip.x * k, IY = c + ip.z * k;
+      if (Math.hypot(IX - c, IY - c) < rMax - 2) sym(ctx, IX, IY, "friend", COLORS.friend);
+    }
+  });
+}
+
+// =============================================================== interceptor kinematics
+function interceptorPos(th, t, out) {
+  const T = th.tInt - th.tLaunch, s = Math.min(Math.max((t - th.tLaunch) / T, 0), 1);
+  const e = Math.pow(s, 1.25);
+  const a = LAUNCH, b = th.intPoint, d = a.distanceTo(b);
+  const c1 = V(a.x, a.y + Math.min(d * 0.35, 60), a.z), c2 = V(b.x * 0.55, Math.max(b.y, a.y) + Math.min(d * 0.18, 40), b.z * 0.55);
+  const u = 1 - e;
+  out.set(0, 0, 0)
+    .addScaledVector(a, u * u * u).addScaledVector(c1, 3 * u * u * e).addScaledVector(c2, 3 * u * e * e).addScaledVector(b, e * e * e);
+  return out;
+}
+
+// =============================================================== UI wiring
+const $ = id => document.getElementById(id);
+let mode = "spy6", st = newState(mode), playing = false, speed = 1, acc = 0, dwellCursor = 0;
+const rows = THREATS.map(d => {
+  const r = document.createElement("div"); r.className = "row"; r.tabIndex = 0; r.setAttribute("role", "button"); r.title = "Follow this threat with the camera";
+  r.innerHTML = `<div class="top"><span class="name">${d.name}<small>TN ${d.tn}</small></span><span class="st">Not yet detected</span></div><div class="pips">${STAGES.map(() => '<div class="pip"></div>').join("")}</div>`;
+  $("board").appendChild(r);
+  const go = () => startFollow(THREATS.indexOf(d));
+  r.addEventListener("click", go); r.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } });
+  return r;
+});
+const mmss = t => `${Math.floor(t / 60)}:${String(Math.round(t % 60)).padStart(2, "0")}`;
+function fillCompare() {
+  const tb = $("compare"); tb.innerHTML = "";
+  THREATS.forEach((d, i) => {
+    const a = RUNS.spy1.threats[i], b = RUNS.spy6.threats[i];
+    const det = th => th.dDet == null ? "never" : (th.dDet / NM).toFixed(0);
+    const kill = th => th.outcome === "Destroyed" ? mmss(th.d.path.t0 + th.d.path.T - th.tInt) : (th.outcome || "—");
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${d.name}</td><td>${det(a)} nm</td><td class="b">${det(b)} nm</td>`;
+    tb.appendChild(tr);
+  });
+  const avg = arr => arr.reduce((s, v) => s + v, 0) / Math.max(arr.length, 1);
+  const busy = RUNS.spy1.updates.length ? Math.max(...RUNS.spy1.updates) : 0;
+  const a1 = RUNS.spy1.threats[5], a6 = RUNS.spy6.threats[5];
+  const spare = th => mmss(th.d.path.t0 + th.d.path.T - th.tInt);
+  $("summary").innerHTML = `SPY-6 picks up the anti-ship ballistic missile at <b>${(a6.dDet / NM).toFixed(0)} nm</b> instead of ${(a1.dDet / NM).toFixed(0)} nm and kills it with <b>${spare(a6)}</b> to spare instead of ${spare(a1)}. Track updates: every <b>${avg(RUNS.spy6.updates).toFixed(1)} s</b> on SPY-6 vs every ${avg(RUNS.spy1.updates).toFixed(1)} s on SPY-1D (worst ${busy.toFixed(1)} s). Sea-skimmers stay hidden below the horizon until about 20 nm, so both radars find those at the same range.`;
+}
+fillCompare();
+const lanes = document.getElementById("lanes"), lx = fitCanvas(lanes);
+const SHORT = ["Drone 1", "Drone 2", "Drone 3", "Cruise 1", "Cruise 2", "Anti-ship BM", "BM in space", "Drone 4", "Drone 5"];
+const NR = THREATS.length;
+const laneEnd = Math.ceil(Math.max(...["spy1", "spy6"].flatMap(m => RUNS[m].threats.map(t => t.tInt || 0))) / 60 + 0.5) * 60;
+function drawLanes() {
+  const W = 340, H = NR * 26 + 24, x0 = 82, x1 = W - 6, rowH = 26, tx = t => x0 + (x1 - x0) * t / laneEnd;
+  lx.clearRect(0, 0, W, H); lx.font = "10.5px IBM Plex Mono, monospace"; lx.textBaseline = "middle";
+  for (let m = 0; m <= laneEnd / 60; m++) { const X = tx(m * 60); lx.strokeStyle = "rgba(150,180,200,.12)"; lx.beginPath(); lx.moveTo(X, 0); lx.lineTo(X, NR * rowH); lx.stroke(); lx.fillStyle = "#8fa3b2"; lx.textAlign = "center"; lx.fillText(m + "m", X, NR * rowH + 10); }
+  THREATS.forEach((d, i) => {
+    const y = i * rowH; lx.textAlign = "left"; lx.fillStyle = "#e6edf2"; lx.fillText(SHORT[i], 0, y + rowH / 2);
+    [["spy1", "#8a96a0", 6], ["spy6", "#59b8ff", 14]].forEach(([m, col, off]) => {
+      const th = RUNS[m].threats[i]; if (th.tDet == null) return;
+      const a = tx(th.tDet), b = tx(th.tInt || th.tDet), on = m === mode;
+      lx.globalAlpha = on ? 1 : 0.55; lx.fillStyle = col; lx.fillRect(a, y + off, Math.max(2, b - a), 6);
+      lx.beginPath(); lx.arc(a, y + off + 3, 3, 0, Math.PI * 2); lx.fill(); lx.globalAlpha = 1;
+    });
+  });
+  const X = tx(Math.min(st.t, laneEnd)); lx.strokeStyle = "#ffd84d"; lx.lineWidth = 1.5; lx.beginPath(); lx.moveTo(X, 0); lx.lineTo(X, NR * rowH); lx.stroke(); lx.lineWidth = 1;
+}
+
+let logLen = -1;
+function renderLog() {
+  if (st.events.length === logLen) return; logLen = st.events.length;
+  if (!st.events.length) { $("log").innerHTML = "<li>Waiting for first detection.</li>"; return; }
+  $("log").innerHTML = st.events.slice(-10).reverse().map(e => `<li><b>${clock(e.t)}</b> ${e.msg}</li>`).join("");
+}
+const clock = t => { const m = Math.floor(t / 60), s = Math.floor(t % 60); return `T+${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`; };
+function renderBoard() {
+  st.threats.forEach((th, i) => {
+    const r = rows[i];
+    r.querySelectorAll(".pip").forEach((p, k) => p.classList.toggle("on", th.stage >= k + 1));
+    r.className = "row " + (th.outcome === "Destroyed" ? "dead" : th.stage >= 3 ? "hostile" : th.stage >= 1 ? "unknown" : "") + (follow === i ? " following" : "");
+    let s = st.t < th.d.path.t0 ? "Not launched" : "Not yet detected";
+    if (th.stage === 0 && st.t >= th.d.path.t0 && th.pos.y >= 0 && Math.hypot(th.pos.x, th.pos.z) > horizonKm(th.pos.y)) s = "Below radar horizon";
+    if (th.stage >= 1) s = STAGES[th.stage - 1];
+    if (th.outcome) s = th.outcome;
+    r.querySelector(".st").textContent = s;
+  });
+}
+function restart() {
+  st = newState(mode); acc = 0; dwellCursor = 0; logLen = -1;
+  objs.forEach(o => { trailClear(o.trail); trailClear(o.wTrail); o.w.g.visible = false; o.flash.material.opacity = 0; o.smoke.material.opacity = 0; });
+  beamPool.forEach(s => { s.b.visible = false; s.life = 0; }); trackBeams.forEach(b => b.visible = false);
+  trkEls.forEach(e => { e.hidden = true; e.dataset.state = ""; }); intEls.forEach(e => e.hidden = true);
+  setPlaying(false); syncStatus();
+}
+function setPlaying(p) { playing = p; $("play").textContent = p ? "Pause" : (st.t > 0 ? "Resume" : "Play"); }
+function setMode(m) { mode = m; $("m6").setAttribute("aria-pressed", m === "spy6"); $("m1").setAttribute("aria-pressed", m === "spy1"); const was = playing; restart(); setPlaying(was || true); }
+$("play").addEventListener("click", () => { if (st.t >= END_T || doneAt(st)) restart(); setPlaying(!playing); });
+$("restart").addEventListener("click", () => { restart(); setPlaying(true); });
+$("m6").addEventListener("click", () => setMode("spy6"));
+$("m1").addEventListener("click", () => setMode("spy1"));
+$("speed").addEventListener("change", e => { speed = +e.target.value; });
+function syncStatus() {
+  const other = mode === "spy6" ? RUNS.spy1 : RUNS.spy6;
+  const n = st.threats.filter((th, i) => th.alive && (mode === "spy6"
+      ? th.stage >= 1 && (other.threats[i].tDet == null || other.threats[i].tDet > st.t)
+      : th.stage === 0 && other.threats[i].tDet != null && other.threats[i].tDet <= st.t)).length;
+  const adv = n ? (mode === "spy6" ? `Tracking ${n} threat${n > 1 ? "s" : ""} SPY-1D couldn't see yet` : `Blind to ${n} threat${n > 1 ? "s" : ""} SPY-6 would already be tracking`) : "";
+  $("status").innerHTML = `${clock(st.t)}<span>${mode === "spy6" ? "SPY-6(V)1" : "SPY-1D"} &middot; ${playing ? speed + "× playback" : (st.t > 0 ? "Paused" : "Press Play")}</span>${adv ? `<b>${adv}</b>` : ""}`;
+}
+
+const CAMS = {
+  camShip: rigFrom(V(0.22, 0.05, 0.26), V(0, 0.012, 0)),
+  camTac: rigFrom(V(-40, 95, 120), V(45, 0, -5)),
+  camSpace: rigFrom(V(-420, 260, 520), V(40, 120, -250)),
+  camUp: { target: V(0, 0.015, 0), yaw: -1.35, pitch: -0.85, dist: 0.16 },
+};
+let camAnim = null;
+function goCam(id) {
+  follow = null; Object.keys(CAMS).forEach(k => $(k).setAttribute("aria-pressed", k === id));
+  camAnim = { a: { target: rig.target.clone(), yaw: rig.yaw, pitch: rig.pitch, dist: rig.dist }, b: CAMS[id], k: 0 };
+}
+Object.keys(CAMS).forEach(k => $(k).addEventListener("click", () => goCam(k)));
+Object.assign(rig, { target: CAMS.camShip.target.clone(), yaw: CAMS.camShip.yaw, pitch: CAMS.camShip.pitch, dist: CAMS.camShip.dist });
+function stepCamAnim(realDt) {
+  if (!camAnim) return;
+  camAnim.k = Math.min(camAnim.k + realDt * 0.8, 1); const e = camAnim.k * camAnim.k * (3 - 2 * camAnim.k), A = camAnim.a, B = camAnim.b;
+  rig.target.lerpVectors(A.target, B.target, e);
+  let dy = B.yaw - A.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); rig.yaw = A.yaw + dy * e;
+  rig.pitch = A.pitch + (B.pitch - A.pitch) * e; rig.dist = Math.exp(Math.log(A.dist) + (Math.log(B.dist) - Math.log(A.dist)) * e);
+  if (camAnim.k >= 1) camAnim = null;
+}
+// keyboard: W A S D / arrows move the focus point across the ground, Q / E down / up
+const keys = new Set();
+window.addEventListener("keydown", e => {
+  if (e.target.tagName === "SELECT" || e.target.tagName === "INPUT") return;
+  const k = e.key.toLowerCase();
+  if (["w","a","s","d","q","e","arrowup","arrowdown","arrowleft","arrowright"].includes(k)) { keys.add(k); if (k.startsWith("arrow")) e.preventDefault(); }
+});
+window.addEventListener("keyup", e => keys.delete(e.key.toLowerCase()));
+window.addEventListener("blur", () => keys.clear());
+let follow = null;
+function followPoint(i) { const th = st.threats[i]; if (th.deadAt) return th.intPoint; if (st.t < th.d.path.t0) return null; return th.pos; }
+function startFollow(i) {
+  follow = i; camAnim = null; Object.keys(CAMS).forEach(k => $(k).setAttribute("aria-pressed", false));
+  const p = followPoint(i) || st.threats[i].d.path.pos(st.threats[i].d.path.t0 + 1, V(0, 0, 0));
+  rig.target.copy(p); rig.dist = THREATS[i].kind === "bm" ? 25 : 2.5; rig.pitch = 0.22;
+  rig.yaw = Math.atan2(-p.x, -p.z) + 0.6;
+}
+function moveCamera(realDt) {
+  stepCamAnim(realDt);
+  if (follow != null) { const p = followPoint(follow); if (p) rig.target.copy(p); }
+  if (!keys.size) return;
+  follow = null; camAnim = null;
+  const sp = Math.max(rig.dist, 0.05) * 0.9 * realDt;
+  const fx = -Math.sin(rig.yaw), fz = -Math.cos(rig.yaw), rx = Math.cos(rig.yaw), rz = -Math.sin(rig.yaw);
+  let mx = 0, mz = 0, my = 0;
+  if (keys.has("w") || keys.has("arrowup")) { mx += fx; mz += fz; }
+  if (keys.has("s") || keys.has("arrowdown")) { mx -= fx; mz -= fz; }
+  if (keys.has("d") || keys.has("arrowright")) { mx += rx; mz += rz; }
+  if (keys.has("a") || keys.has("arrowleft")) { mx -= rx; mz -= rz; }
+  if (keys.has("e")) my += 1; if (keys.has("q")) my -= 1;
+  rig.target.x += mx * sp; rig.target.z += mz * sp; rig.target.y = Math.max(0, rig.target.y + my * sp);
+}
+
+// =============================================================== frame
+const dirTmp = V(0, 0, 0), Z = V(0, 0, 1);
+function place(el, p, sizePx) {
+  const s = toScreen(p); if (!s || s.x < -50 || s.y < -50 || s.x > view.clientWidth + 50 || s.y > view.clientHeight + 50) { el.hidden = true; return; }
+  el.hidden = false; el.style.left = s.x + "px"; el.style.top = s.y + "px"; el.style.width = el.style.height = sizePx + "px";
+}
+function render(realDt) {
+  // radar dwells -> beams
+  dwellCursor = st.dwells.length;
+  st.threats.forEach((th, i) => {
+    const tb = trackBeams[i];
+    if (th.alive && th.stage >= 1 && th.lastUpd != null) {
+      const o = FACE_POS[faceOf(th.pos)], L = o.distanceTo(th.pos), r = Math.max(L * Math.tan(BW / 2), 0.002);
+      tb.position.copy(o); tb.lookAt(th.pos); tb.scale.set(r, r, L); tb.visible = true;
+      tb.material.uniforms.opacity.value = 0.05 + 0.3 * Math.exp(-(st.t - th.lastUpd) / 0.12);
+    } else tb.visible = false;
+  });
+  if (playing) { // search raster (visual): SPY-6 many simultaneous receive beams per face, SPY-1D one at a time
+    const n = mode === "spy6" ? 3 : 1;
+    for (let f = 0; f < 4; f++) for (let j = 0; j < n; j++) if (Math.random() < realDt * (mode === "spy6" ? 9 : 5)) {
+      const az = THREE.MathUtils.degToRad(f * 90 + 5 + Math.random() * 80), el = THREE.MathUtils.degToRad(Math.random() * 35);
+      const L = 60; fireBeam(f, V(Math.sin(az) * Math.cos(el) * L, Math.sin(el) * L, -Math.cos(az) * Math.cos(el) * L), false);
+    }
+  }
+  beamPool.forEach(s => { if (!s.b.visible) return; s.life -= realDt; if (s.life <= 0) { s.b.visible = false; return; } s.b.material.uniforms.opacity.value = s.peak * 1.6 * (s.life / s.max); });
+
+  const fpx = focalPx();
+  st.threats.forEach((th, i) => {
+    const o = objs[i], d = th.d, g = o.m.g;
+    const launched = st.t >= d.path.t0;
+    g.visible = launched && th.alive;
+    if (g.visible) {
+      g.position.copy(th.pos);
+      const ahead = d.path.pos(st.t + 0.5, dirTmp.set(0, 0, 0)).sub(th.pos);
+      if (ahead.lengthSq() > 1e-12) g.quaternion.setFromUnitVectors(Z, ahead.normalize());
+      g.scale.setScalar(visScale(th.pos, d.len) * M);
+      if (d.kind === "bm") {
+        const s = (st.t - d.path.t0) / d.path.T, boosting = s < d.path.boost;
+        o.m.body.visible = boosting; o.m.rv.visible = !boosting;
+        if (boosting) o.m.body.userData.plume.scale.set(1, 0.9 + Math.random() * 0.25, 1);
+      }
+      if (playing && (d.kind !== "bm" || (st.t - d.path.t0) / d.path.T < d.path.boost + 0.02)) trailPush(o.trail, th.pos);
+    }
+    // interceptor
+    renderGun(th, i);
+    const flying = th.stage >= 4 && !th.deadAt && !WEAPON[d.weapon].gun;
+    o.w.g.visible = flying;
+    if (flying) {
+      const p = interceptorPos(th, st.t, V(0, 0, 0)), q = interceptorPos(th, st.t + 0.2, V(0, 0, 0)).sub(p);
+      o.w.g.position.copy(p); if (q.lengthSq() > 1e-12) o.w.g.quaternion.setFromUnitVectors(Z, q.normalize());
+      o.w.g.scale.setScalar(visScale(p, o.w.len) * M);
+      o.w.g.userData.plume.visible = (st.t - th.tLaunch) < (th.tInt - th.tLaunch) * 0.7;
+      if (playing) trailPush(o.wTrail, p);
+      place(intEls[i], p, Math.max(14, visScale(p, o.w.len) * o.w.len * M / camera.position.distanceTo(p) * fpx));
+      intEls[i].className = "trk friend"; intEls[i].querySelector(".lbl").textContent = `${d.weapon} → ${d.tn}`;
+    } else intEls[i].hidden = true;
+    // intercept flash + smoke
+    if (th.deadAt) {
+      const age = st.t - th.deadAt, sz = Math.max(0.03, camera.position.distanceTo(th.intPoint) * 0.012);
+      o.flash.position.copy(th.intPoint); o.flash.scale.setScalar(sz * (0.6 + age * 1.2)); o.flash.material.opacity = Math.max(0, 1 - age / 1.6);
+      o.smoke.position.copy(th.intPoint); o.smoke.scale.setScalar(sz * (0.8 + age * 0.7)); o.smoke.material.opacity = th.intPoint.y > 60 ? 0 : Math.max(0, 0.55 - age / 18);
+    }
+    // track bracket
+    const el = trkEls[i];
+    if (th.stage >= 1 && (th.alive || (th.deadAt && st.t - th.deadAt < 6))) {
+      const p = th.alive ? th.pos : th.intPoint;
+      const sz = Math.max(18, visScale(p, d.len) * d.len * M / camera.position.distanceTo(p) * fpx * 1.6) + Math.min(14, (st.t - th.seenAt) * 6);
+      place(el, p, sz);
+      const cls = th.deadAt ? "dead" : th.stage >= 3 ? "hostile" : "unknown";
+      if (el.dataset.state !== cls) { el.className = "trk " + cls + " fresh"; el.dataset.state = cls; void el.offsetWidth; }
+      const rng = (p.length() / NM).toFixed(0), spd = d.kind === "bm" ? "" : ` ${Math.round((d.kind === "drone" ? 0.0514 : 0.25) * KT)} kt`;
+      const o1 = RUNS.spy1.threats[i], lead = mode === "spy6" && !th.deadAt && (o1.tDet == null || o1.tDet > st.t) ? `<br><i>SPY-1D can't see this yet</i>` : "";
+      el.querySelector(".lbl").innerHTML = th.deadAt ? `${d.tn} DESTROYED${th.intPoint.y >= 100 ? " IN SPACE" : ""}` : `${d.tn} ${th.stage >= 3 ? "HOSTILE " + d.cls : "UNKNOWN"}<br>${rng} nm${p.y > 1 ? ` · ${p.y.toFixed(0)} km alt` : ""}${spd}${p.y >= 100 ? "<br><i>IN SPACE, above 100 km</i>" : ""}${lead}`;
+    } else if (mode === "spy1" && th.alive && th.stage === 0 && RUNS.spy6.threats[i].tDet != null && RUNS.spy6.threats[i].tDet <= st.t) {
+      const p = th.pos, sz = Math.max(18, visScale(p, d.len) * d.len * M / camera.position.distanceTo(p) * fpx * 1.6);
+      place(el, p, sz);
+      if (el.dataset.state !== "ghost") { el.className = "trk ghost"; el.dataset.state = "ghost"; }
+      el.querySelector(".lbl").innerHTML = `${d.name}: SPY-1D hasn't detected it<br><i>SPY-6 would have been tracking it for ${mmss(st.t - RUNS.spy6.threats[i].tDet)}</i>`;
+    } else el.hidden = true;
+  });
+  ringTags.forEach((r, i) => place(ringEls[i], r.p, 0));
+  drawScopes(st); renderBoard(); renderLog(); syncStatus(); drawLanes();
+}
+
+function resize() { const w = view.clientWidth, h = view.clientHeight; renderer.setSize(w, h, false); camera.aspect = w / Math.max(h, 1); camera.updateProjectionMatrix(); }
+window.addEventListener("resize", resize);
+let last = performance.now();
+function frame(now) {
+  const realDt = Math.min((now - last) / 1000, 0.1); last = now;
+  if (playing) { acc += realDt * speed * PLAYBACK; while (acc >= 0.05) { step(st, 0.05); acc -= 0.05; } if (st.t >= END_T || doneAt(st)) setPlaying(false); }
+  moveCamera(realDt);
+  applyRig();
+  ocean.position.set(camera.position.x, 0, camera.position.z);
+  ocean.material.uniforms.time.value = now / 1000; ocean.material.uniforms.camPos.value.copy(camera.position);
+  ship.position.y = Math.sin(now / 1900) * 0.0004; ship.rotation.z = Math.sin(now / 2300) * 0.012;
+  render(realDt);
+  renderer.render(scene, camera);
+  requestAnimationFrame(frame);
+}
+resize(); restart(); requestAnimationFrame(frame);
+window.__seek = t => { while (st.t < t) step(st, 0.05); }; // jump the scenario clock (used for testing)
+window.__look = (x, y, z, yaw, pitch, dist) => { follow = null; camAnim = null; Object.assign(rig, { target: V(x, y, z), yaw, pitch, dist }); };
+})();
+</script>
+
+</body>
+</html>

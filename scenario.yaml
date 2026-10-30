@@ -24,18 +24,20 @@ threats:                         # 17 total, launched over about 6 minutes
   - {id: S1-S8, type: drone swarm, count: 8, launch: "T+5:00, 1.5 s apart"}
 
 showcase_events:                 # the five advantages, each shown in the sim with a callout
-  1_range:          A1 detection range, SPY-6 vs SPY-1D (~215 nm vs ~43 nm)
+  1_range:          A1 detection range, SPY-6 vs SPY-1D (215 nm vs 102 nm; 315 s vs 104 s of warning)
   2_capacity:       8-drone swarm; SPY-1D track updates slow and tracks drop (TRACK LOST)
   3_jamming:
     start_s: 160
-    jammer: stand-off EW aircraft, bearing 074, ~96 nm
+    jammer: stand-off EW aircraft, bearing 100, ~97 nm (covers the eastern drones, deliberately NOT the ASBM at 074)
     sector_half_width_deg: 12
-    range_kept: {SPY-1D: 0.42, SPY-6: 0.95}   # illustrative; SPY-6 steers an adaptive null
+    range_kept: {SPY-1D: 0.15, SPY-6: 0.95}   # illustrative; SPY-6 steers an adaptive null
   4_discrimination:
     decoys_release: 17% of B1 flight
     time_to_pick_warhead_s: {SPY-6: 6, SPY-1D: 40}   # illustrative; driven by bandwidth (range resolution c/2B)
   5_availability:   shown in the charts and paper (SPY-1 calibration downtime vs SPY-6 graceful degradation)
 
 outcome:                         # both radars defeat the raid (Carney did it with SPY-1D)
-  difference: SPY-6 sees earlier, keeps every track, holds range under jamming, and kills the
+  difference: SPY-6 sees earlier, keeps every track (0 vs 25 lost), holds range under jamming, and kills the
               space threat about 70 s sooner, leaving more time and margin.
+
+export: the Results tab has a 'Download results (CSV)' button with every number for both radars.

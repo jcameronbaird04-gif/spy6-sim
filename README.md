@@ -12,16 +12,20 @@ Press Play, then switch the radar between **SPY-6** and **SPY-1D** and run the s
 
 | # | Advantage | What happens in the sim |
 |---|-----------|------------------------|
-| 1 | Range | SPY-6 detects the anti-ship ballistic missile at ~215 nm; SPY-1D at ~43 nm |
+| 1 | Range | SPY-6 detects the anti-ship ballistic missile at 215 nm; SPY-1D at 102 nm (315 s vs 104 s of warning) |
 | 2 | Capacity | During the swarm SPY-1D's track updates slow down and tracks are lost; SPY-6 keeps all of them |
-| 3 | Jamming | A jammer turns on at T+2:40. SPY-6 nulls it; SPY-1D loses more than half its range in that sector |
+| 3 | Jamming | A jammer turns on at T+2:40, bearing 100. SPY-6 nulls it; SPY-1D keeps only 15% of its range in that sector, so drones there are seen much later |
 | 4 | Discrimination | The ballistic missile releases 3 decoys. SPY-6 picks the warhead in 6 s, SPY-1D in about 40 s |
 | 5 | Availability | Covered in the paper and charts (SPY-1 calibration downtime, SPY-6 graceful degradation) |
+
+## Getting data out
+
+Open **Data → Results** and press **Download results (CSV)**. You get every threat for both radars (detection time and range, ID, weapon launch, intercept time, range and altitude, warning time, tracks lost), track-update statistics and the full event log.
 
 ## Controls
 
 Drag to look around (drag up to look into the sky) · right-drag or W A S D to move · Q / E down / up ·
-scroll to zoom · click a threat in the list to follow it · Ship / Tactical / Space / Look up camera presets.
+scroll to zoom · click a track to follow it. **Auto** camera (on by default) cuts to each event; any manual move turns it off.
 
 ## Files
 

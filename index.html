@@ -6,9 +6,9 @@
 <title>Flight III Kill Chain</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 </head>
 <body>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <style>
 /* Layout: one-screen app. Realistic 3D view on the left with two radar scopes
    inset at the bottom; a combat-system console column on the right (stacks on phones).
@@ -107,6 +107,15 @@ td.b { color: var(--accent); font-weight: 600; }
 #lanes { display: block; max-width: 100%; }
 table.mini { margin-top: 8px; }
 .status b { display: block; color: var(--accent); font-weight: 600; font-size: 11px; margin-top: 3px; max-width: 260px; white-space: normal; text-align: right; }
+.trk.jam .box { --c: #ffb347; } .trk.jam .lbl { color: #ffb347; }
+.trk.decoy .box { --c: rgba(170,180,190,.75); } .trk.decoy .lbl { color: #b4bec7; }
+.trk.lost .box { --c: #ff8a3d; border-style: dashed; opacity: .85; } .trk.lost .lbl { color: #ff8a3d; }
+.callout { position: absolute; left: 50%; top: 134px; transform: translate(-50%, -6px); width: min(560px, calc(100% - 32px)); box-sizing: border-box;
+  background: rgba(5,12,18,.86); border: 1px solid rgba(150,180,200,.18); border-left: 3px solid var(--accent); padding: 9px 13px 10px;
+  font-size: 12px; line-height: 1.45; color: var(--text); pointer-events: none; opacity: 0; transition: opacity .35s, transform .35s; }
+.callout.on { opacity: 1; transform: translate(-50%, 0); }
+.callout .k { display: block; font: 600 13px/1.2 var(--head); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); margin-bottom: 3px; }
+.callout.bad { border-left-color: #ff8a3d; } .callout.bad .k { color: #ff8a3d; }
 .trk.ghost .box { --c: rgba(220,228,235,.85); opacity: .9; } .trk.ghost .lbl { color: #e8eef2; }
 .trk .lbl i { font-style: normal; color: var(--accent); }
 .log { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; font-size: 11px; }
@@ -132,10 +141,11 @@ dt { color: var(--text); } dd { margin: 0; color: var(--muted); }
   <div class="view" id="view">
     <canvas id="scene" aria-label="3D view of a Flight III destroyer engaging a mixed missile and drone raid"></canvas>
     <div class="overlay" id="overlay"></div>
+    <div class="callout" id="callout" role="status" aria-live="polite"></div>
     <div class="hud">
       <div class="claim">
-        <h1>SPY-6: ~30&times; more sensitive than SPY-1</h1>
-        <p><b>+15 dB</b> lets it see a target 2.4&times; farther, and digital beamforming holds a beam on every track at once. Watch one Flight III defeat a Red Sea style raid, then switch to SPY-1D and run it again.</p>
+        <h1>SPY-6 vs SPY-1D: better at every job</h1>
+        <p><b>~30&times; more sensitive (+15 dB)</b>: it sees farther, holds a beam on every track, nulls jammers and sorts warheads from decoys. Watch a Flight III defeat a Red Sea style raid, then switch to SPY-1D and run it again.</p>
       </div>
       <div class="status" id="status">T+00:00<span>Press Play</span></div>
     </div>
@@ -174,7 +184,7 @@ dt { color: var(--text); } dd { margin: 0; color: var(--muted); }
     <section>
       <h2>Same raid, both radars</h2>
       <div class="lanekey"><span class="k1"></span>SPY-1D <span class="k6"></span>SPY-6 <em>bar = first detection &rarr; kill</em></div>
-      <canvas id="lanes" width="340" height="258"></canvas>
+      <canvas id="lanes" width="340" height="318"></canvas>
       <table class="mini">
         <thead><tr><th>Threat</th><th>Seen at, 1D</th><th>Seen at, 6</th></tr></thead>
         <tbody id="compare"></tbody>
@@ -234,7 +244,7 @@ function ballistic(p0, p1, apex, t0, T) {
 const WEAPON = {
   "SM-2": { v: 1.1, maxR: 166, len: 4.7, exo: false },
   "SM-6": { v: 1.1, maxR: 240, len: 6.6, exo: false },
-  "SM-3": { v: 3.0, maxR: 900, len: 6.6, exo: true },
+  "SM-3": { v: 4.5, maxR: 1000, len: 6.6, exo: true, label: "SM-3 Block IIA" },
   "5-inch": { gun: true, v: 0.8, maxR: 18, rate: 3, rounds: 4, mount: V(0, 0.0100, -0.0665), label: "5-inch gun" },
   "CIWS": { gun: true, v: 1.1, maxR: 2.0, burst: 1.6, mount: V(0, 0.0165, 0.056), label: "Phalanx CIWS" },
 };
@@ -248,26 +258,43 @@ const THREATS = [
   { id: "B1", tn: 1007, name: "BM in space", cls: "MRBM", kind: "bm", rcs: 0.2, len: 14, weapon: "SM-3", path: ballistic(V(250, 0, 350), V(-250, 0, -1450), 250, 120, 720) },
   { id: "D4", tn: 1008, name: "Drone 4", cls: "UAV", kind: "drone", rcs: 0.1, len: 3.5, weapon: "5-inch", path: straight(V(12, 0, -24), 0.03, 0.0514, 250, 0.3) },
   { id: "D5", tn: 1009, name: "Drone 5 (pop-up)", cls: "UAV", kind: "drone", rcs: 0.05, len: 2.5, weapon: "CIWS", path: straight(V(4.5, 0, 4.5), 0.015, 0.06, 380, 0.15) },
+  // drone swarm: eight Shahed-type drones pop over the horizon together (capacity showcase)
+  ...[52, 60, 68, 77, 86, 95, 104, 113].map((b, k) => {
+    const r = 48 + (k % 3) * 0.8, a = b * Math.PI / 180;
+    return { id: "S" + (k + 1), tn: 1010 + k, name: `Swarm drone ${k + 1}`, cls: "UAV", kind: "drone", swarm: true, rcs: 0.1, len: 3.5, weapon: "SM-2",
+      path: straight(V(Math.sin(a) * r, 0, -Math.cos(a) * r), 0.05, 0.0514, 300 + k * 1.5, 0.4) };
+  }),
 ];
-const END_T = 900;
+THREATS.find(d => d.id === "B1").decoys = 3;
+// stand-off jammer aircraft (jamming showcase): orbits east of the ship, noise-jamming one sector
+const JAM = { t0: 160, pos: V(170, 8, -50), half: 12, loss: { spy1: 0.42, spy6: 0.95 } };
+JAM.brg = (Math.atan2(JAM.pos.x, -JAM.pos.z) * 180 / Math.PI + 360) % 360;
+const angDiff = (a, b) => Math.abs(((a - b + 540) % 360) - 180);
+const DECOY_REL = 0.17;                          // fraction of B1's flight when decoys separate
+const DISCRIM = { spy6: 6, spy1: 40 };           // seconds after release to pick out the warhead (illustrative)
+const LOST_GAP = 4;                              // a track not updated for this long is dropped (illustrative)
+const END_T = 1000;
 const STAGES = ["Detect", "Track", "ID", "Engage", "Midcourse", "Terminal", "Assess"];
 
 // =============================================================== combat system model
 function newState(mode) {
   return { mode, t: 0, events: [], dwells: [], faces: [0, 1, 2, 3].map(i => ({ i, clock: i * 0.03, slot: 0, rr: 0, searchProg: 0, lastWasSearch: false })),
-    nextSearch6: [0.1, 0.35, 0.6, 0.85], updates: [],
+    nextSearch6: [0.1, 0.35, 0.6, 0.85], updates: [], callouts: [], flags: {},
     threats: THREATS.map(d => ({ d, stage: 0, looks: 0, alive: true, outcome: null, pos: V(0, -99, 0), seen: null, seenAt: 0,
-      tDet: null, dDet: null, tId: null, tLaunch: null, tInt: null, intPoint: null, nextUpd: 0, lastUpd: null, ints: null })) };
+      tDet: null, tAcq: null, dDet: null, tId: null, lost: 0, lostAt: null, tLaunch: null, tInt: null, intPoint: null, nextUpd: 0, lastUpd: null, ints: null })) };
 }
 const tmp = V(0, 0, 0), tmp2 = V(0, 0, 0);
 const say = (st, msg) => st.events.push({ t: st.t, msg });
-function covered(th, mode) {
+function jamFactor(st, p) { return st.t >= JAM.t0 && angDiff(bearing(p), JAM.brg) < JAM.half ? JAM.loss[st.mode] : 1; }
+function covered(th, mode, st) {
   const p = th.pos; if (p.y < 0) return false;
   const d = p.length();
-  return d <= rangeFor(th.d.rcs, mode) && Math.hypot(p.x, p.z) <= horizonKm(p.y);
+  return d <= rangeFor(th.d.rcs, mode) * jamFactor(st, p) && Math.hypot(p.x, p.z) <= horizonKm(p.y);
 }
 function detect(st, th) {
-  th.stage = 1; th.tDet = st.t; th.dDet = th.pos.length(); th.looks = 1; th.lastUpd = st.t; th.seen = th.pos.clone(); th.seenAt = st.t; th.nextUpd = st.t + 0.25;
+  const re = th.tDet != null;
+  th.stage = 1; th.tAcq = st.t; if (re) { say(st, `REACQUIRE track ${th.d.tn}`); return void Object.assign(th, { looks: 1, lastUpd: st.t, seen: th.pos.clone(), seenAt: st.t, nextUpd: st.t + 0.25 }); }
+  th.tDet = st.t; th.dDet = th.pos.length(); th.looks = 1; th.lastUpd = st.t; th.seen = th.pos.clone(); th.seenAt = st.t; th.nextUpd = st.t + 0.25;
   say(st, `DETECT track ${th.d.tn}, ${(th.dDet / NM).toFixed(0)} nm, bearing ${bearing(th.pos).toFixed(0).padStart(3, "0")}`);
 }
 function look(st, th, face) {
@@ -301,12 +328,15 @@ function step(st, dt) {
     }
   }
   const live = th => th.alive && th.stage >= 1;
+  if (st.t >= JAM.t0 && !st.flags.jam) { st.flags.jam = true; say(st, `JAMMING from bearing ${JAM.brg.toFixed(0).padStart(3, "0")}: stand-off jammer`); st.callouts.push({ t: st.t, key: "jam" }); }
+  { const a1 = st.threats.find(t => t.d.id === "A1"); if (a1.tDet != null && !st.flags.range) { st.flags.range = true; st.callouts.push({ t: st.t, key: "range" }); } }
+  if (!st.flags.swarm && st.threats.filter(t => t.d.swarm && t.stage >= 1).length >= 5) { st.flags.swarm = true; st.callouts.push({ t: st.t, key: "swarm" }); }
   if (mode === "spy6") {
     // digital beamforming: every track gets its own look every 0.5 s; each face completes a search frame every 1 s
     for (const th of st.threats) if (live(th) && st.t >= th.nextUpd) { look(st, th, faceOf(th.pos)); th.nextUpd += 0.25; }
     for (let f = 0; f < 4; f++) if (st.t >= st.nextSearch6[f]) {
       st.nextSearch6[f] += 1.0;
-      for (const th of st.threats) if (th.alive && th.stage === 0 && st.t >= th.d.path.t0 && faceOf(th.pos) === f && covered(th, mode)) detect(st, th);
+      for (const th of st.threats) if (th.alive && th.stage === 0 && st.t >= th.d.path.t0 && faceOf(th.pos) === f && covered(th, mode, st)) detect(st, th);
     }
   } else {
     // one beam per face, 0.1 s per dwell: 2 of every 10 dwells go to tracks, the rest to search; a search frame needs 10 search dwells
@@ -321,7 +351,7 @@ function step(st, dt) {
         } else {
           if (++face.searchProg >= 10) {
             face.searchProg = 0;
-            for (const th of st.threats) if (th.alive && th.stage === 0 && st.t >= th.d.path.t0 && faceOf(th.pos) === face.i && covered(th, mode)) detect(st, th);
+            for (const th of st.threats) if (th.alive && th.stage === 0 && st.t >= th.d.path.t0 && faceOf(th.pos) === face.i && covered(th, mode, st)) detect(st, th);
           }
         }
       }
@@ -329,7 +359,17 @@ function step(st, dt) {
   }
   for (const th of st.threats) {
     if (th.stage === 1 && th.looks >= 3) { th.stage = 2; say(st, `TRACK ${th.d.tn} firm, ${(th.pos.length() / NM).toFixed(0)} nm`); }
-    if (th.stage === 2 && th.looks >= 6 && st.t >= th.tDet + 4) { th.stage = 3; th.tId = st.t; say(st, `ID ${th.d.tn} HOSTILE ${th.d.cls}`); }
+    if (th.stage === 2 && th.d.decoys) {
+      const tRel = th.d.path.t0 + DECOY_REL * th.d.path.T, tDis = tRel + DISCRIM[mode];
+      if (st.t >= tRel && !st.flags.decoysOut) { st.flags.decoysOut = true; say(st, `${th.d.tn}: ${th.d.decoys} decoys released, 4 objects in space`); }
+      if (st.t >= tDis && !st.flags.discrim) { st.flags.discrim = true; say(st, `DISCRIMINATE ${th.d.tn}: warhead picked out of 4 objects`); st.callouts.push({ t: st.t, key: "discrim" }); }
+    }
+    if (th.stage === 2 && th.looks >= 6 && st.t >= th.tAcq + 4 && (!th.d.decoys || st.flags.discrim)) { th.stage = 3; th.tId = st.t; say(st, `ID ${th.d.tn} HOSTILE ${th.d.cls}`); }
+    if (th.alive && th.stage >= 1 && th.stage <= 3 && st.t - th.lastUpd > LOST_GAP) {
+      th.stage = 0; th.looks = 0; th.lost++; th.lostAt = st.t;
+      say(st, `TRACK LOST ${th.d.tn}: no update for ${(st.t - th.lastUpd).toFixed(1)} s`);
+      if (!st.flags.lost) { st.flags.lost = true; st.callouts.push({ t: st.t, key: "lost" }); }
+    }
     const w = WEAPON[th.d.weapon];
     if (th.stage === 3 && st.t >= th.tId + 2 && th.alive) {
       if (w.gun) {
@@ -731,6 +771,60 @@ const gunFx = THREATS.map(d => {
   }
   return fx;
 });
+// stand-off jammer aircraft + jam sector, B1 decoys
+function buildJammer() { // generic twin-engine EW aircraft, nose +z
+  const g = new THREE.Group(), mat = new THREE.MeshStandardMaterial({ color: 0x8e979f, roughness: 0.6, metalness: 0.2 });
+  g.add(cylAlongZ(1.4, 1.1, 26, mat));
+  const nose = new THREE.Mesh(new THREE.SphereGeometry(1.4, 12, 10), mat); nose.scale.z = 2; nose.position.z = 13; g.add(nose);
+  box(g, 30, 0.5, 4.2, 0, 0, 1, mat); box(g, 10, 0.4, 2.6, 0, 1.6, -11.5, mat); box(g, 0.4, 5, 3.4, 0, 3.4, -11, mat);
+  [-6, 6].forEach(x => { const e = cylAlongZ(0.8, 0.8, 4.5, mat); e.position.set(x, -0.9, 2.5); g.add(e); });
+  const pod = new THREE.Mesh(new THREE.CylinderGeometry(3.2, 3.2, 0.6, 24), mat); pod.position.set(0, 2.2, -2); g.add(pod); // rotodome-style EW antenna
+  return { g, len: 28 };
+}
+const jammer = buildJammer(); jammer.g.visible = false; scene.add(jammer.g);
+let jamEl;
+function wedgeGeo(halfDeg, R, H) {
+  const pts = [], b = JAM.brg * Math.PI / 180, h = halfDeg * Math.PI / 180, n = 24, P = a => [Math.sin(a) * R, Math.cos(a) * -R];
+  for (let i = 0; i < n; i++) { const [x0, z0] = P(b - h + 2 * h * i / n), [x1, z1] = P(b - h + 2 * h * (i + 1) / n);
+    pts.push(0, 0.05, 0, x0, 0.05, z0, x1, 0.05, z1, x0, 0.05, z0, x1, 0.05, z1, x1, H, z1, x0, 0.05, z0, x1, H, z1, x0, H, z0); }
+  [b - h, b + h].forEach(a => { const [x, z] = P(a); pts.push(0, 0.05, 0, x, 0.05, z, x, H, z); });
+  const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3)); return g;
+}
+const wedgeMat = c => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending, fog: false });
+const jamWedge = { spy1: new THREE.Mesh(wedgeGeo(JAM.half, 420, 30), wedgeMat(0xff9a40)), spy6: new THREE.Mesh(wedgeGeo(1.2, 420, 30), wedgeMat(0x59b8ff)) };
+Object.values(jamWedge).forEach(m => { m.visible = false; m.frustumCulled = false; scene.add(m); });
+const B1i = THREATS.findIndex(d => d.id === "B1"), B1d = THREATS[B1i], B1rel = B1d.path.t0 + DECOY_REL * B1d.path.T;
+const DECOY_DIR = [V(1, 0.35, 0.2), V(-0.8, 0.5, 0.45), V(0.15, -0.3, -1)].map(v => v.normalize());
+const decoys = DECOY_DIR.map(() => { const m = buildBallistic(B1d.len); m.body.visible = false; m.rv.visible = true; m.g.visible = false; scene.add(m.g); return { m, el: null }; });
+const decoyPos = (k, t, out) => B1d.path.pos(t - 1.5 * (k + 1), out).addScaledVector(DECOY_DIR[k], Math.min(9, 0.15 * (t - B1rel)));
+const avgArr = arr => arr.reduce((s, v) => s + v, 0) / Math.max(arr.length, 1);
+function calloutText(key, m) {
+  const a1 = RUNS.spy1.threats[THREATS.findIndex(d => d.id === "A1")], a6 = RUNS.spy6.threats[THREATS.findIndex(d => d.id === "A1")];
+  const b1 = RUNS.spy1.threats[B1i], b6 = RUNS.spy6.threats[B1i], nm = th => (th.dDet / NM).toFixed(0), lost1 = RUNS.spy1.threats.reduce((s, t) => s + t.lost, 0);
+  const T = {
+    range: ["1 · Range", m === "spy6" ? `SPY-6 has the anti-ship ballistic missile at <b>${nm(a6)} nm</b>. SPY-1D won't see it until ${nm(a1)} nm. Same missile, same ship: that is +15 dB of sensitivity.`
+                                     : `SPY-1D finally detects the anti-ship ballistic missile at <b>${nm(a1)} nm</b>. SPY-6 had it at ${nm(a6)} nm, minutes earlier.`, m === "spy1"],
+    swarm: ["2 · Capacity", m === "spy6" ? `Eight-drone swarm. Digital beamforming forms a beam on every track at once, so each track is refreshed about every <b>${avgArr(RUNS.spy6.updates).toFixed(1)} s</b>.`
+                                         : `Eight-drone swarm. SPY-1D time-shares its beam, so track updates stretch to about every <b>${avgArr(RUNS.spy1.updates).toFixed(1)} s</b> and tracks start to drop.`, m === "spy1"],
+    jam: ["3 · Jamming", m === "spy6" ? `A stand-off jammer turns on at bearing ${JAM.brg.toFixed(0).padStart(3, "0")}. SPY-6 digitizes every module, so it steers a <b>null</b> at the jammer and keeps <b>${Math.round(JAM.loss.spy6 * 100)}%</b> of its range there.`
+                                      : `A stand-off jammer turns on at bearing ${JAM.brg.toFixed(0).padStart(3, "0")}. SPY-1D can't null it in its analog array: range in that sector drops to <b>${Math.round(JAM.loss.spy1 * 100)}%</b>.`, m === "spy1"],
+    lost: ["2 · Capacity", `<b>Track lost.</b> SPY-1D didn't get back to a drone in time and has to search for it again. Over the whole raid SPY-1D drops ${lost1} tracks; SPY-6 drops ${RUNS.spy6.threats.reduce((s, t) => s + t.lost, 0)}.`, true],
+    discrim: ["4 · Discrimination", m === "spy6" ? `The ballistic missile released 3 decoys: 4 objects in space. SPY-6's wider bandwidth sorts out the warhead in <b>${DISCRIM.spy6} s</b>, so SM-3 goes early.`
+                                                 : `4 objects in space. SPY-1D needs about <b>${DISCRIM.spy1} s</b> to pick the warhead out of the decoys, so the SM-3 launches late (kill at T+${mmss(b1.tInt)} vs T+${mmss(b6.tInt)} with SPY-6).`, m === "spy1"],
+  };
+  return T[key];
+}
+let coShown = 0, coQueue = [], coLeft = 0;
+function runCallouts(realDt) {
+  const el = document.getElementById("callout");
+  if (st.callouts.length < coShown) coShown = 0;
+  while (coShown < st.callouts.length) { const c = st.callouts[coShown++]; if (st.t - c.t < 8) coQueue.push(c.key); }
+  if (coLeft > 0) { coLeft -= realDt; if (coLeft <= 0) el.classList.remove("on"); return; }
+  if (coLeft <= 0 && coQueue.length) {
+    const [k, txt, bad] = calloutText(coQueue.shift(), mode);
+    el.innerHTML = `<span class="k">${k}</span>${txt}`; el.classList.toggle("bad", !!bad); el.classList.add("on"); coLeft = 7;
+  }
+}
 const camScale = (p, k) => Math.max(0.0012, camera.position.distanceTo(p) * k);
 function renderGun(th, i) {
   const fx = gunFx[i]; if (!fx) return;
@@ -813,6 +907,7 @@ function fireBeam(face, target, track) {
 const overlay = document.getElementById("overlay");
 function mkTrk() { const e = document.createElement("div"); e.className = "trk"; e.innerHTML = '<div class="box"></div><div class="lbl"></div>'; e.hidden = true; overlay.appendChild(e); return e; }
 const trkEls = THREATS.map(mkTrk), intEls = THREATS.map(mkTrk);
+jamEl = mkTrk(); decoys.forEach(dc => { dc.el = mkTrk(); });
 const ringEls = ringTags.map(r => { const e = document.createElement("div"); e.className = "trk"; e.innerHTML = `<div class="lbl" style="color:#${r.color.toString(16).padStart(6, "0")};margin-left:0;left:0">${r.label}</div>`; e.hidden = true; overlay.appendChild(e); return e; });
 const proj = V(0, 0, 0);
 function toScreen(p) {
@@ -854,6 +949,13 @@ function drawScopes(st) {
   ctx.stroke();
   const R = rangeFor(0.1, st.mode) * k; ctx.setLineDash([3, 4]); ctx.strokeStyle = "rgba(89,184,255,.4)"; ctx.beginPath(); ctx.arc(c, c, R, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
   sym(ctx, c, c + 3, "friend", COLORS.friend);
+  if (st.t >= JAM.t0) { // jam strobe: SPY-1D sees a noise wedge, SPY-6 has nulled it
+    const b = JAM.brg * Math.PI / 180, h = (st.mode === "spy1" ? JAM.half : 1.2) * Math.PI / 180, a0 = b - h - Math.PI / 2, a1 = b + h - Math.PI / 2;
+    ctx.beginPath(); ctx.moveTo(c, c); ctx.arc(c, c, rMax, a0, a1); ctx.closePath();
+    ctx.fillStyle = st.mode === "spy1" ? `rgba(255,150,60,${0.16 + 0.06 * Math.sin(st.t * 7)})` : "rgba(89,184,255,.10)"; ctx.fill();
+    ctx.fillStyle = st.mode === "spy1" ? "#ffb347" : "#59b8ff"; ctx.textAlign = "center";
+    ctx.fillText(st.mode === "spy1" ? "JAM" : "NULLED", c + Math.sin(b) * rMax * 0.62, c - Math.cos(b) * rMax * 0.62 - 6); ctx.textAlign = "left";
+  }
   st.threats.forEach(th => {
     if (th.stage < 1 || !th.seen) return;
     const dead = th.outcome === "Destroyed";
@@ -914,20 +1016,20 @@ function fillCompare() {
 }
 fillCompare();
 const lanes = document.getElementById("lanes"), lx = fitCanvas(lanes);
-const SHORT = ["Drone 1", "Drone 2", "Drone 3", "Cruise 1", "Cruise 2", "Anti-ship BM", "BM in space", "Drone 4", "Drone 5"];
+const SHORT = ["Drone 1", "Drone 2", "Drone 3", "Cruise 1", "Cruise 2", "Anti-ship BM", "BM in space", "Drone 4", "Drone 5", ...[1, 2, 3, 4, 5, 6, 7, 8].map(k => "Swarm " + k)];
 const NR = THREATS.length;
 const laneEnd = Math.ceil(Math.max(...["spy1", "spy6"].flatMap(m => RUNS[m].threats.map(t => t.tInt || 0))) / 60 + 0.5) * 60;
 function drawLanes() {
-  const W = 340, H = NR * 26 + 24, x0 = 82, x1 = W - 6, rowH = 26, tx = t => x0 + (x1 - x0) * t / laneEnd;
-  lx.clearRect(0, 0, W, H); lx.font = "10.5px IBM Plex Mono, monospace"; lx.textBaseline = "middle";
+  const W = 340, rowH = 17, H = NR * rowH + 24, x0 = 82, x1 = W - 6, tx = t => x0 + (x1 - x0) * t / laneEnd;
+  lx.clearRect(0, 0, W, H); lx.font = "10px IBM Plex Mono, monospace"; lx.textBaseline = "middle";
   for (let m = 0; m <= laneEnd / 60; m++) { const X = tx(m * 60); lx.strokeStyle = "rgba(150,180,200,.12)"; lx.beginPath(); lx.moveTo(X, 0); lx.lineTo(X, NR * rowH); lx.stroke(); lx.fillStyle = "#8fa3b2"; lx.textAlign = "center"; lx.fillText(m + "m", X, NR * rowH + 10); }
   THREATS.forEach((d, i) => {
     const y = i * rowH; lx.textAlign = "left"; lx.fillStyle = "#e6edf2"; lx.fillText(SHORT[i], 0, y + rowH / 2);
-    [["spy1", "#8a96a0", 6], ["spy6", "#59b8ff", 14]].forEach(([m, col, off]) => {
+    [["spy1", "#8a96a0", 3], ["spy6", "#59b8ff", 9]].forEach(([m, col, off]) => {
       const th = RUNS[m].threats[i]; if (th.tDet == null) return;
       const a = tx(th.tDet), b = tx(th.tInt || th.tDet), on = m === mode;
-      lx.globalAlpha = on ? 1 : 0.55; lx.fillStyle = col; lx.fillRect(a, y + off, Math.max(2, b - a), 6);
-      lx.beginPath(); lx.arc(a, y + off + 3, 3, 0, Math.PI * 2); lx.fill(); lx.globalAlpha = 1;
+      lx.globalAlpha = on ? 1 : 0.55; lx.fillStyle = col; lx.fillRect(a, y + off, Math.max(2, b - a), 5);
+      lx.beginPath(); lx.arc(a, y + off + 2.5, 2.5, 0, Math.PI * 2); lx.fill(); lx.globalAlpha = 1;
     });
   });
   const X = tx(Math.min(st.t, laneEnd)); lx.strokeStyle = "#ffd84d"; lx.lineWidth = 1.5; lx.beginPath(); lx.moveTo(X, 0); lx.lineTo(X, NR * rowH); lx.stroke(); lx.lineWidth = 1;
@@ -947,6 +1049,7 @@ function renderBoard() {
     r.className = "row " + (th.outcome === "Destroyed" ? "dead" : th.stage >= 3 ? "hostile" : th.stage >= 1 ? "unknown" : "") + (follow === i ? " following" : "");
     let s = st.t < th.d.path.t0 ? "Not launched" : "Not yet detected";
     if (th.stage === 0 && st.t >= th.d.path.t0 && th.pos.y >= 0 && Math.hypot(th.pos.x, th.pos.z) > horizonKm(th.pos.y)) s = "Below radar horizon";
+    if (th.stage === 0 && th.lost && th.alive) s = "Track lost, re-searching";
     if (th.stage >= 1) s = STAGES[th.stage - 1];
     if (th.outcome) s = th.outcome;
     r.querySelector(".st").textContent = s;
@@ -957,6 +1060,7 @@ function restart() {
   objs.forEach(o => { trailClear(o.trail); trailClear(o.wTrail); o.w.g.visible = false; o.flash.material.opacity = 0; o.smoke.material.opacity = 0; });
   beamPool.forEach(s => { s.b.visible = false; s.life = 0; }); trackBeams.forEach(b => b.visible = false);
   trkEls.forEach(e => { e.hidden = true; e.dataset.state = ""; }); intEls.forEach(e => e.hidden = true);
+  coShown = 0; coQueue = []; coLeft = 0; document.getElementById("callout").classList.remove("on");
   setPlaying(false); syncStatus();
 }
 function setPlaying(p) { playing = p; $("play").textContent = p ? "Pause" : (st.t > 0 ? "Resume" : "Play"); }
@@ -1107,8 +1211,35 @@ function render(realDt) {
       place(el, p, sz);
       if (el.dataset.state !== "ghost") { el.className = "trk ghost"; el.dataset.state = "ghost"; }
       el.querySelector(".lbl").innerHTML = `${d.name}: SPY-1D hasn't detected it<br><i>SPY-6 would have been tracking it for ${mmss(st.t - RUNS.spy6.threats[i].tDet)}</i>`;
+    } else if (th.alive && th.stage === 0 && th.lostAt != null && st.t - th.lostAt < 6) {
+      const p = th.pos; place(el, p, 22);
+      if (el.dataset.state !== "lost") { el.className = "trk lost"; el.dataset.state = "lost"; }
+      el.querySelector(".lbl").innerHTML = `${d.tn} TRACK LOST<br><i>no update for ${LOST_GAP}+ s · re-searching</i>`;
     } else el.hidden = true;
   });
+  // jammer
+  const jOn = st.t >= JAM.t0, jVis = st.t >= JAM.t0 - 40;
+  const jp = V(JAM.pos.x + 4 * Math.sin(st.t / 60), JAM.pos.y, JAM.pos.z + 4 * Math.cos(st.t / 60));
+  jammer.g.visible = jVis; jammer.g.position.copy(jp); jammer.g.rotation.y = -st.t / 60 + Math.PI; jammer.g.scale.setScalar(visScale(jp, 28) * M);
+  if (jVis) {
+    place(jamEl, jp, Math.max(18, visScale(jp, 28) * 28 * M / camera.position.distanceTo(jp) * fpx * 1.4)); jamEl.className = "trk jam";
+    jamEl.querySelector(".lbl").innerHTML = !jOn ? `EW AIRCRAFT · ${(jp.length() / NM).toFixed(0)} nm` : `JAMMER · brg ${JAM.brg.toFixed(0).padStart(3, "0")}<br><i>${mode === "spy6" ? `nulled: ${Math.round(JAM.loss.spy6 * 100)}% range kept` : `SPY-1D sector range down to ${Math.round(JAM.loss.spy1 * 100)}%`}</i>`;
+  } else jamEl.hidden = true;
+  Object.entries(jamWedge).forEach(([m, w]) => { w.visible = jOn && m === mode; w.material.opacity = m === "spy1" ? 0.07 + 0.03 * Math.sin(st.t * 6) : 0.06; });
+  // decoys
+  const b1 = st.threats[B1i], tDis = B1rel + DISCRIM[mode], sorted = st.t >= tDis;
+  decoys.forEach((dc, k) => {
+    const on = st.t >= B1rel && (b1.alive || (b1.deadAt && st.t - b1.deadAt < 8));
+    dc.m.g.visible = on; if (!on) { dc.el.hidden = true; return; }
+    const p = decoyPos(k, st.t, V(0, 0, 0)), q = decoyPos(k, st.t + 0.5, V(0, 0, 0)).sub(p);
+    dc.m.g.position.copy(p); if (q.lengthSq() > 1e-12) dc.m.g.quaternion.setFromUnitVectors(Z, q.normalize()); dc.m.g.scale.setScalar(visScale(p, B1d.len) * M);
+    if (b1.stage >= 1 || b1.deadAt) {
+      place(dc.el, p, 18); dc.el.className = "trk " + (sorted ? "decoy" : "unknown");
+      dc.el.querySelector(".lbl").innerHTML = sorted ? "DECOY · ignored" : `OBJECT ${k + 2} of 4 ?`;
+    } else dc.el.hidden = true;
+  });
+  if (!trkEls[B1i].hidden && b1.alive && st.t >= B1rel && b1.stage >= 1) trkEls[B1i].querySelector(".lbl").innerHTML += sorted ? "<br><i>WARHEAD (3 decoys rejected)</i>" : `<br><i>OBJECT 1 of 4: warhead or decoy?</i>`;
+  runCallouts(realDt);
   ringTags.forEach((r, i) => place(ringEls[i], r.p, 0));
   drawScopes(st); renderBoard(); renderLog(); syncStatus(); drawLanes();
 }

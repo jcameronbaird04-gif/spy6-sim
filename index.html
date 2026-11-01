@@ -106,12 +106,12 @@ button:focus-visible { outline: 1px solid var(--ink); outline-offset: 3px; }
 .nocap .callout { display: none; }
 
 /* ---- title card ---- */
-.brief { position: absolute; inset: 0; display: grid; place-items: center; padding: 20px; background: radial-gradient(70% 60% at 50% 50%, rgba(0,0,0,.45), rgba(0,0,0,.15)); text-align: center; text-shadow: var(--shadow); }
+.brief { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; }
 .brief[hidden] { display: none; }
-.brief .t1 { font: 700 13px/1 var(--cond); letter-spacing: .3em; color: var(--ink-2); text-transform: uppercase; }
-.brief h1 { margin: 12px 0 10px; font: 300 clamp(30px, 5vw, 54px)/1.05 var(--cond); letter-spacing: .02em; }
-.brief h1 b { font-weight: 700; color: var(--s6); } .brief h1 span { font-weight: 700; color: var(--s1); }
-.brief p { margin: 0 auto 14px; max-width: 560px; font: 400 15px/1.5 var(--cond); color: var(--ink-2); }
+.bigplay { pointer-events: auto; width: 96px; height: 96px; border-radius: 50%; border: 2px solid rgba(255,255,255,.85); background: rgba(0,0,0,.28);
+  -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); display: grid; place-items: center; box-shadow: 0 6px 30px rgba(0,0,0,.35); transition: transform .2s, background .2s; }
+.bigplay:hover { transform: scale(1.06); background: rgba(0,0,0,.42); }
+.bigplay .tri { width: 0; height: 0; margin-left: 8px; border-left: 30px solid #fff; border-top: 19px solid transparent; border-bottom: 19px solid transparent; }
 .go { font: 700 13px/1 var(--cond); letter-spacing: .24em; text-transform: uppercase; padding: 12px 26px; border: 1px solid rgba(255,255,255,.6); }
 .go:hover { background: rgba(255,255,255,.12); }
 
@@ -131,7 +131,8 @@ button:focus-visible { outline: 1px solid var(--ink); outline-offset: 3px; }
 .bar button[aria-pressed="true"] { color: var(--ink); border-bottom-color: var(--ink); }
 .bar #m6[aria-pressed="true"] { color: var(--s6); border-bottom-color: var(--s6); }
 .bar #m1[aria-pressed="true"] { color: var(--s1); border-bottom-color: var(--s1); }
-.bar .play { font-weight: 700; color: var(--ink); min-width: 62px; text-align: left; }
+.bar .play { font-weight: 700; color: #0b0f12; background: var(--ink); padding: 8px 16px 7px; border-radius: 3px; border: 0; min-width: 84px; text-align: center; text-shadow: none; }
+.bar .play:hover { color: #0b0f12; background: #fff; }
 .bar .end { margin-left: auto; }
 .hint { position: absolute; right: 18px; bottom: 46px; font: 400 11px/1.3 var(--cond); color: var(--ink-3); text-shadow: var(--shadow); pointer-events: none; text-align: right; }
 
@@ -255,13 +256,7 @@ dt { color: var(--ink); } dd { margin: 0; color: var(--ink-2); }
   </aside>
 
   <div class="brief" id="brief">
-    <div>
-      <div class="t1">Red Sea &middot; one Navy destroyer &middot; 17 incoming threats</div>
-      <h1>Same attack. <b>SPY-6</b> vs <span>SPY-1D</span>.</h1>
-      <p>A warship's radar is how it sees what is coming. The earlier and more clearly it sees each threat, the more time the crew has to shoot it down before it reaches the ship.</p>
-      <p>This plays the same attack twice: once with the Navy's new SPY-6 radar, once with the older SPY-1D that most destroyers still carry. Watch how much sooner, and how much more, SPY-6 sees.</p>
-      <button class="go" type="button" id="briefGo">Play with SPY-6</button>
-    </div>
+    <button class="bigplay" type="button" id="briefGo" aria-label="Play"><span class="tri"></span></button>
   </div>
   <div class="endcard" id="endcard" hidden>
     <div class="in">
@@ -282,6 +277,12 @@ dt { color: var(--ink); } dd { margin: 0; color: var(--ink-2); }
 </main>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/CopyShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/EffectComposer.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
 <script>
 (() => {
 "use strict";
@@ -384,7 +385,8 @@ function plan(st, th) {
     if (d > w.maxR) continue;
     if (w.exo && tmp.y < 100) continue;
     if (!w.exo && tmp.y > 90) continue;
-    if (4 + d * 1.18 / w.v <= tI - st.t) return { tI, point: tmp.clone() };
+    const fly = 4 + d * 1.18 / w.v;
+    if (fly <= tI - st.t) return { tI, point: tmp.clone(), tL: Math.max(st.t, tI - fly) };   // launch so the missile flies at its real speed
   }
   return null;
 }
@@ -467,9 +469,10 @@ function step(st, dt) {
         }
       } else {
         const pl = plan(st, th);
-        if (pl) { th.stage = 4; th.tLaunch = st.t; th.tInt = pl.tI; th.intPoint = pl.point; say(st, `ENGAGE ${th.d.tn}: ${th.d.weapon} away from Mk 41 VLS`); }
+        if (pl) { th.stage = 4; th.tLaunch = pl.tL; th.tInt = pl.tI; th.intPoint = pl.point; say(st, pl.tL - st.t > 2 ? `ENGAGE ${th.d.tn}: firing solution, ${th.d.weapon} launches in ${Math.round(pl.tL - st.t)} s` : `ENGAGE ${th.d.tn}: ${th.d.weapon} away from Mk 41 VLS`); }
       }
     }
+    if (th.stage === 4 && !w.gun && !th.saidAway && st.t >= th.tLaunch && th.tLaunch - th.tId > 4) { th.saidAway = true; say(st, `LAUNCH ${th.d.weapon} away from Mk 41 VLS at ${th.d.tn}`); }
     if (th.stage === 4 && st.t >= th.tLaunch + (w.gun ? 0.3 : 4)) { th.stage = 5; if (!w.gun) say(st, `MIDCOURSE ${th.d.weapon} on uplink to ${th.d.tn}`); }
     if (th.stage === 5 && st.t >= th.tInt - (w.gun ? 0.5 : 4)) { th.stage = 6; if (!w.gun) say(st, `TERMINAL ${th.d.weapon} homing on ${th.d.tn}`); }
     if (th.stage === 6 && st.t >= th.tInt && !th.deadAt) {
@@ -493,6 +496,24 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputEncoding = THREE.sRGBEncoding;
 const scene = new THREE.Scene();
+let composer = null, bloomPass = null, finalPass = null;
+const FINAL = {
+  uniforms: { tDiffuse: { value: null }, time: { value: 0 }, res: { value: new THREE.Vector2(1, 1) } },
+  vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
+  fragmentShader: `uniform sampler2D tDiffuse; uniform float time; uniform vec2 res; varying vec2 vUv;
+    void main(){
+      vec3 c = texture2D(tDiffuse, vUv).rgb;
+      c = pow(max(c, 0.0), vec3(1.0 / 2.2));                                   // linear -> display
+      float l = dot(c, vec3(0.299, 0.587, 0.114));
+      c = mix(vec3(l), c, 1.07);                                               // a touch more colour
+      c = mix(c, c * c * (3.0 - 2.0 * c), 0.22);                               // gentle S-curve contrast
+      c *= vec3(0.985, 1.0, 1.02) + vec3(0.03, 0.01, -0.02) * l;                // cool shadows, warm highlights
+      vec2 q = vUv - 0.5; c *= 1.0 - dot(q * vec2(1.0, 0.8), q) * 0.62;        // lens vignette
+      float g = fract(sin(dot(floor(vUv * res) + fract(time) * 97.0, vec2(12.9898, 78.233))) * 43758.5453);
+      c += (g - 0.5) * 0.016;                                                  // fine film grain
+      gl_FragColor = vec4(c, 1.0);
+    }`,
+};
 const HAZE = new THREE.Color(0x9fb3c3);
 scene.fog = new THREE.FogExp2(HAZE, 0.0026);
 const camera = new THREE.PerspectiveCamera(45, 1, 0.003, 30000);
@@ -585,7 +606,8 @@ function skyMaterial(env) {
         vec3 spaceCol = mix(vec3(0.003, 0.006, 0.016), vec3(0.25, 0.45, 0.8), exp(-abs(d.y + 0.03 * spc) * 26.0));
         spaceCol += vec3(1.0, 0.96, 0.9) * smoothstep(0.99955, 0.99985, sd) * 5.0;
         col = mix(col, spaceCol, spc * (d.y > -0.05 ? 1.0 : 0.0));
-        gl_FragColor = vec4(col, 1.0);
+        gl_FragColor = vec4(pow(max(col, 0.0), vec3(2.2)), 1.0);
+        #include <encodings_fragment>
       }`,
   });
 }
@@ -667,7 +689,8 @@ const ocean = new THREE.Mesh(new THREE.PlaneGeometry(8000, 8000, 200, 200),   //
       col += vec3(1.0,0.93,0.82) * pow(max(dot(n,h),0.0), 40.0) * 0.025;
       float fog = 1.0 - exp(-d * fogD);
       col = mix(col, vec3(0.62,0.69,0.75), fog);
-      gl_FragColor = vec4(col, 1.0);
+      gl_FragColor = vec4(pow(max(col, 0.0), vec3(2.2)), 1.0);
+        #include <encodings_fragment>
     }`,
 }));
 ocean.rotation.x = -Math.PI / 2; scene.add(ocean);
@@ -724,6 +747,12 @@ function taperedPrism(pts, y0, h, topScale, m, cx = 0, cz = 0) {
   const mesh = new THREE.Mesh(ng, m); mesh.material.side = THREE.DoubleSide; return mesh;
 }
 const chamfered = (x0, x1, hw, c) => [[x1 - c, -hw], [x1, -hw + c], [x1, hw - c], [x1 - c, hw], [x0 + c, hw], [x0, hw - c], [x0, -hw + c], [x0 + c, -hw]];
+const WEATHER_GLSL = `
+  float whash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+  float wnoise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
+    return mix(mix(whash(i), whash(i+vec2(1.0,0.0)), f.x), mix(whash(i+vec2(0.0,1.0)), whash(i+vec2(1.0,1.0)), f.x), f.y); }
+  float wfbm(vec2 p){ float a = 0.0, w = 0.5; for (int i = 0; i < 4; i++){ a += w * wnoise(p); p = p * 2.07 + 3.1; w *= 0.5; } return a; }
+`;
 function buildShip() {
   const g = new THREE.Group();
   const HULL = new THREE.MeshStandardMaterial({ color: 0x4f565c, roughness: 0.66, metalness: 0.1, flatShading: true, side: THREE.DoubleSide, envMapIntensity: 0.55 });
@@ -733,7 +762,22 @@ function buildShip() {
   const ARR = new THREE.MeshStandardMaterial({ color: 0x3a4046, roughness: 0.35, metalness: 0.3, envMapIntensity: 1.0 });
   const DARK2 = new THREE.MeshStandardMaterial({ color: 0x2a2e32, roughness: 0.7 });
   const WHT = new THREE.MeshStandardMaterial({ color: 0xdfe2df, roughness: 0.5 });
-  const HULLS = new THREE.MeshStandardMaterial({ color: 0x5d646b, roughness: 0.6, metalness: 0.1, side: THREE.DoubleSide, envMapIntensity: 0.6 });
+  const weather = (m, hullish) => { m.onBeforeCompile = sh => {
+    sh.vertexShader = "varying vec3 vWP;\n" + sh.vertexShader.replace("#include <project_vertex>", "#include <project_vertex>\n vWP = (modelMatrix * vec4(transformed, 1.0)).xyz;");
+    sh.fragmentShader = "varying vec3 vWP;\n" + WEATHER_GLSL + sh.fragmentShader
+      .replace("#include <map_fragment>", `#include <map_fragment>
+        vec3 P = vWP * 1000.0;
+        float n = wfbm(P.xz * 0.3 + vec2(P.y * 0.25, 0.0));
+        float streak = wnoise(vec2((P.x + P.z) * 1.3, P.y * 0.06));
+        float rust = smoothstep(0.72, 0.95, wnoise(vec2((P.x - P.z) * 4.0, P.y * 0.5))) * smoothstep(0.6, 0.9, wnoise(P.xz * 0.11));
+        float seam = smoothstep(0.93, 1.0, abs(sin(P.y * 1.745))) * 0.07 + smoothstep(0.97, 1.0, abs(sin((P.x + P.z) * 0.9))) * 0.04;
+        diffuseColor.rgb *= 0.86 + 0.24 * n - 0.10 * smoothstep(0.45, 0.9, streak) - seam;
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.20, 0.11, 0.06), rust * ${hullish ? "0.22" : "0.10"});
+        ${hullish ? "diffuseColor.rgb *= mix(0.62, 1.0, smoothstep(0.4, 2.2, P.y));" : ""}`)
+      .replace("#include <roughnessmap_fragment>", "#include <roughnessmap_fragment>\n roughnessFactor = clamp(roughnessFactor + (wfbm(vWP.xz * 1400.0) - 0.5) * 0.3, 0.25, 1.0);");
+  }; return m; };
+  [HULL, SUP].forEach(m => weather(m, m === HULL));
+  const HULLS = weather(new THREE.MeshStandardMaterial({ color: 0x5d646b, roughness: 0.6, metalness: 0.1, side: THREE.DoubleSide, envMapIntensity: 0.6 }), true);
   // ---- hull: lofted stations, bow at +x. Flare and sheer forward, transom stern.
   const N = 64, L = 155, xs = -L / 2;
   const bw = t => 9.9 * (t < 0.04 ? 0.84 : t < 0.55 ? 1 : Math.max(0.0, Math.cos((t - 0.55) / 0.45 * Math.PI / 2) ** 0.9));
@@ -884,7 +928,7 @@ const wake = new THREE.Mesh(new THREE.PlaneGeometry(0.34, 1.6, 1, 1), new THREE.
       float k = exp(-pow(arm / (0.004 + Y * 0.012), 2.0)) * exp(-Y * 1.6) * 0.55 * smoothstep(0.0, 0.03, Y);
       float n = fbm2(vec2(x * 900.0, Y * 300.0 - time * 1.5));
       float a = clamp((c * (0.55 + 0.6 * n) + k * (0.4 + 0.8 * n)), 0.0, 0.85);
-      gl_FragColor = vec4(vec3(0.86, 0.90, 0.92), a);
+      gl_FragColor = vec4(vec3(0.70, 0.78, 0.82), a);
       #include <fog_fragment>
     }`,
 }));
@@ -949,6 +993,67 @@ function makeTrail(color, opacity, n = 400) {
 }
 function trailPush(tr, p) { tr.pts.push(p.x, p.y, p.z); if (tr.pts.length > tr.n * 3) tr.pts.splice(0, 3); const a = tr.line.geometry.attributes.position; a.array.set(tr.pts); a.needsUpdate = true; tr.line.geometry.setDrawRange(0, tr.pts.length / 3); }
 function trailClear(tr) { tr.pts.length = 0; tr.line.geometry.setDrawRange(0, 0); }
+
+// ---- smoke: soft particles that grow, drift with the wind and fade. Missile exhaust, launch clouds, kill smoke.
+const SMOKE_N = 6000;
+const smk = (() => {
+  const g = new THREE.BufferGeometry();
+  const pos = new Float32Array(SMOKE_N * 3), birth = new Float32Array(SMOKE_N).fill(-1e9), life = new Float32Array(SMOKE_N).fill(1), size = new Float32Array(SMOKE_N * 2), shade = new Float32Array(SMOKE_N);
+  g.setAttribute("position", new THREE.BufferAttribute(pos, 3)); g.setAttribute("birth", new THREE.BufferAttribute(birth, 1));
+  g.setAttribute("life", new THREE.BufferAttribute(life, 1)); g.setAttribute("size", new THREE.BufferAttribute(size, 2)); g.setAttribute("shade", new THREE.BufferAttribute(shade, 1));
+  const m = new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, fog: false,
+    uniforms: { now: { value: 0 }, scale: { value: 800 }, fogD: { value: 0.0026 }, sunDir: { value: sun.clone() } },
+    vertexShader: `
+      #include <common>
+      #include <logdepthbuf_pars_vertex>
+      attribute float birth; attribute float life; attribute vec2 size; attribute float shade;
+      uniform float now; uniform float scale; uniform float fogD;
+      varying float vAge; varying float vShade; varying float vFog;
+      void main(){
+        float age = (now - birth) / life; vAge = age; vShade = shade;
+        if (age < 0.0 || age > 1.0) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); gl_PointSize = 0.0; return; }
+        float t = age * life;
+        vec3 p = position + vec3(0.0045, 0.0012, 0.002) * t;                    // ~5 m/s wind, slow rise
+        vec4 mv = modelViewMatrix * vec4(p, 1.0);
+        float sz = mix(size.x, size.y, sqrt(age)) * 0.001;
+        gl_PointSize = clamp(sz * scale / max(-mv.z, 1e-4), 1.2, 600.0);
+        vFog = 1.0 - exp(-fogD * -mv.z);
+        gl_Position = projectionMatrix * mv;
+        #include <logdepthbuf_vertex>
+      }`,
+    fragmentShader: `
+      #include <common>
+      #include <logdepthbuf_pars_fragment>
+      varying float vAge; varying float vShade; varying float vFog;
+      void main(){
+        #include <logdepthbuf_fragment>
+        vec2 c = gl_PointCoord - 0.5; float r = length(c) * 2.0; if (r > 1.0) discard;
+        float soft = 1.0 - r * r; soft *= soft;
+        float lit = 0.75 + 0.25 * (0.5 - c.y);                                    // brighter on the sunny top
+        float a = soft * pow(1.0 - vAge, 1.6) * 0.55;
+        vec3 col = mix(vec3(0.42, 0.43, 0.45), vec3(0.95, 0.95, 0.94), vShade) * lit;
+        col = mix(col, vec3(0.62, 0.69, 0.75), vFog);
+        gl_FragColor = vec4(pow(col, vec3(2.2)), a * (1.0 - vFog * 0.7));
+        #include <encodings_fragment>
+      }`,
+  });
+  const pts = new THREE.Points(g, m); pts.frustumCulled = false; pts.renderOrder = 2; scene.add(pts);
+  let cur = 0, dirty = false;
+  return {
+    m, emit(p, s0, s1, lf, sh, jit = 0) {
+      const i = cur; cur = (cur + 1) % SMOKE_N;
+      pos[i * 3] = p.x + (Math.random() - 0.5) * jit; pos[i * 3 + 1] = p.y + (Math.random() - 0.5) * jit; pos[i * 3 + 2] = p.z + (Math.random() - 0.5) * jit;
+      birth[i] = st.t - Math.random() * 0.1; life[i] = lf * (0.8 + Math.random() * 0.4); size[i * 2] = s0; size[i * 2 + 1] = s1 * (0.8 + Math.random() * 0.4); shade[i] = sh;
+      dirty = true;
+    },
+    clear() { birth.fill(-1e9); dirty = true; },
+    flush() { if (!dirty) return; dirty = false; ["position", "birth", "life", "size", "shade"].forEach(k => g.attributes[k].needsUpdate = true); },
+  };
+})();
+const launchFlash = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: 0xffd9a0, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, toneMapped: false }));
+scene.add(launchFlash); let launchAt = -1e9;
+const lerpTmp = V(0, 0, 0);
 
 const SMOKE = (() => { const c = document.createElement("canvas"); c.width = c.height = 128; const x = c.getContext("2d");
   for (let k = 0; k < 26; k++) { const a = Math.random() * 6.283, r = Math.random() * 30, cx = 64 + Math.cos(a) * r, cy = 64 + Math.sin(a) * r, rr = 18 + Math.random() * 22;
@@ -1112,9 +1217,10 @@ function beamMat(col = 0x3fc6ff) {
         float side = abs(dot(normalize(np + 1e-5), vp / max(l, 1e-4)));
         float core = mix(1.0, pow(side, 1.6), smoothstep(0.03, 0.25, l));
         float along = (1.0 - smoothstep(0.30, 0.98, vAlong)) * smoothstep(0.0, 0.015, vAlong);
-        float pulse = 0.85 + 0.15 * sin(vAlong * 90.0 - time * 30.0);           // energy travelling out along the beam
+        float pulse = 0.92 + 0.08 * sin(vAlong * 40.0 - time * 6.0);           // energy travelling out along the beam
         float a = opacity * along * core * pulse;
-        gl_FragColor = vec4(mix(color, vec3(1.0), core * core * 0.2) * a, a);
+        vec3 bc = pow(mix(color, vec3(1.0), core * core * 0.2), vec3(2.2)); gl_FragColor = vec4(bc * a * 1.15, a);
+        #include <encodings_fragment>
       }`,
   });
 }
@@ -1141,7 +1247,7 @@ function fireBeam(face, target, track) {
   s.b.position.copy(o); s.b.lookAt(target);
   const r = Math.max(L * Math.tan(BW / 2), 0.002);
   s.b.scale.set(r, r, L); s.b.visible = true; s.b.material.uniforms.nearFrac.value = Math.min(1, 0.0022 / r);
-  s.max = s.life = track ? 0.3 : 0.22; s.peak = track ? 0.3 : 0.07;
+  s.max = s.life = track ? 0.45 : 0.5; s.peak = track ? 0.25 : 0.05;
 }
 
 // =============================================================== labels (track brackets)
@@ -1212,7 +1318,7 @@ function drawScopes(st) {
       if (!dead) { const v = th.d.path.pos(th.seenAt + 60, V(0, 0, 0)).sub(p).multiplyScalar(k * 0.6); ctx.strokeStyle = col; ctx.beginPath(); ctx.moveTo(X, Y); ctx.lineTo(X + Math.max(-30, Math.min(30, v.x)), Y + Math.max(-30, Math.min(30, v.z))); ctx.stroke(); }
       ctx.fillStyle = col; ctx.fillText(th.d.tn, X + 7, Y + 11);
     }
-    if (th.stage >= 4 && th.stage <= 6 && !th.deadAt && !WEAPON[th.d.weapon].gun) {
+    if (th.stage >= 4 && th.stage <= 6 && !th.deadAt && !WEAPON[th.d.weapon].gun && st.t >= th.tLaunch) {
       const ip = interceptorPos(th, st.t, V(0, 0, 0)), IX = c + ip.x * k, IY = c + ip.z * k;
       if (Math.hypot(IX - c, IY - c) < rMax - 2) sym(ctx, IX, IY, "friend", COLORS.friend);
     }
@@ -1308,7 +1414,8 @@ function renderBoard() {
 }
 function restart() {
   st = newState(mode); acc = 0; dwellCursor = 0; logLen = -1;
-  objs.forEach(o => { trailClear(o.trail); trailClear(o.wTrail); o.w.g.visible = false; o.flash.material.opacity = 0; o.smoke.material.opacity = 0; });
+  smk.clear(); launchAt = -1e9;
+  objs.forEach(o => { o._vls = o._ks = false; o._lp = o._bp = null; trailClear(o.trail); trailClear(o.wTrail); o.w.g.visible = false; o.flash.material.opacity = 0; o.smoke.material.opacity = 0; });
   beamPool.forEach(s => { s.b.visible = false; s.life = 0; }); trackBeams.forEach(b => b.visible = false);
   trkEls.forEach(e => { e.hidden = true; e.dataset.state = ""; }); intEls.forEach(e => e.hidden = true);
   coShown = 0; coQueue = []; coLeft = 0; document.getElementById("callout").classList.remove("on");
@@ -1378,7 +1485,7 @@ function syncStatus() {
   $("status").textContent = adv; $("status").classList.toggle("s1", mode === "spy1");
   $("fClock").textContent = clock(st.t);
   $("fRadar").textContent = mode === "spy6" ? "AN/SPY-6(V)1" : "AN/SPY-1D(V)"; $("fRadar").classList.toggle("s1", mode === "spy1");
-  $("fRate").textContent = playing ? (st.ff ? "fast-forward: quiet" : `${speed}× speed`) : (st.t > 0 ? "Paused" : "Standby");
+  $("fRate").textContent = playing ? (activeGun() >= 0 ? "slow motion" : st.ff ? "fast-forward: quiet" : `${speed}× speed`) : (st.t > 0 ? "Paused" : "Standby");
   $("fTrk").textContent = String(st.threats.filter(th => th.alive && th.stage >= 1).length);
   $("fKill").textContent = `${st.threats.filter(th => th.outcome === "Destroyed").length}/${st.threats.length}`;
   $("scopeTitle").textContent = mode === "spy6" ? "SPY-6 air picture" : "SPY-1D air picture";
@@ -1432,7 +1539,7 @@ let auto = true, shot = null, shotHold = 0;
 function setAuto(on) { auto = on; $("camAuto").setAttribute("aria-pressed", on); if (on) { shot = null; shotHold = 0; focus = null; flight = null; follow = null; camAnim = null; Object.keys(CAMS).forEach(k => $(k).setAttribute("aria-pressed", false)); } }
 function manual() { if (auto) { auto = false; $("camAuto").setAttribute("aria-pressed", false); $("camtag").textContent = "Free camera"; } }
 const A1i = THREATS.findIndex(d => d.id === "A1");
-const SHOTNAME = { ship: "Watching: your ship", swarm: "Watching: the drone swarm", jam: "Watching: the jamming aircraft", a1: "Watching: the missile aimed at your ship", space: "Watching: the missile in space", decoys: "Watching: decoys in space" };
+const SHOTNAME = { gun: "Watching: close-in guns", ship: "Watching: your ship", swarm: "Watching: the drone swarm", jam: "Watching: the jamming aircraft", a1: "Watching: the missile aimed at your ship", space: "Watching: the missile in space", decoys: "Watching: decoys in space" };
 const DRIFT = { ship: 0.035, swarm: 0.02, jam: 0.012, space: 0.01 };
 let focus = null, focusUntil = 0, dirSeen = 0, dirDecoy = false;
 const FOCUS_OF = { range: "a1", jam: "jam", swarm: "swarm", lost: "swarm", discrim: "decoys" };
@@ -1451,6 +1558,12 @@ function runChapters(now) {
   }
   if (chapUntil && now > chapUntil) { $("chapter").classList.remove("on"); chapUntil = 0; }
 }
+function activeGun() {
+  let best = -1, bt = -1;
+  st.threats.forEach((th, i) => { const w = WEAPON[th.d.weapon]; if (!w.gun || th.tLaunch == null) return;
+    if (st.t >= th.tLaunch - 4 && (!th.deadAt || st.t < th.deadAt + 3.5) && th.tLaunch > bt) { bt = th.tLaunch; best = i; } });
+  return best;
+}
 function pickShot(now) {
   // events get the camera for ~8 s of real time, whatever the playback speed
   if (st.callouts.length < dirSeen) { dirSeen = 0; dirDecoy = false; focus = null; }
@@ -1459,6 +1572,7 @@ function pickShot(now) {
   const b1 = st.threats[B1i], a1 = st.threats[A1i];
   if (focus === "decoys" && !b1.alive) focus = null;
   if (focus === "a1" && !a1.alive) focus = null;
+  if (activeGun() >= 0) return "gun";                    // last-ditch guns always get the camera
   if (focus && now < focusUntil) return focus;
   if (b1.alive && b1.stage >= 1 && b1.pos.y > 60) return "space";
   if (b1.deadAt && st.t - b1.deadAt < 4 && b1.intPoint.y > 60) return "space";
@@ -1469,15 +1583,21 @@ function pickShot(now) {
 const SHOT_SWARM = rigFrom(V(-0.55, 0.11, 0.3), V(0.25, 0.02, -0.1)), SHOT_JAM = rigFrom(V(-45, 55, 70), V(80, 0, 10));
 function shotRig(id) {
   if (id === "ship") return CAMS.camShip;
+  if (id === "gun") { const i = activeGun(); if (i < 0) return CAMS.camShip; const th = st.threats[i], m = WEAPON[th.d.weapon].mount, tp = th.deadAt ? th.intPoint : th.pos;
+    const dir = V(tp.x - m.x, 0, tp.z - m.z).normalize(), side = V(-dir.z, 0, dir.x);
+    let score = 0; st.threats.forEach((o, j) => { if (j !== i && o.alive && o.stage >= 1) score += Math.sign(o.pos.x * side.x + o.pos.z * side.z); });
+    if (score > 0) side.multiplyScalar(-1);                                       // stand on the side away from the other tracks' beams
+    return rigFrom(V(side.x * 0.3 - dir.x * 0.14, 0.045, side.z * 0.3 - dir.z * 0.14), V(dir.x * 0.22, 0.008, dir.z * 0.22)); }   // off the ship's beam: whole ship firing toward the target   // off the ship's beam: whole ship in the foreground, firing toward the target
   if (id === "swarm") return SHOT_SWARM;
   if (id === "jam") return SHOT_JAM;
   if (id === "space") { // side-on to the missile's whole arc, from the sea side, so the climb above 100 km reads clearly
     const b = st.threats[B1i], P = b.deadAt ? b.intPoint : b.pos, apex = B1d.path.pos(B1d.path.t0 + B1d.path.T / 2, V(0, 0, 0));
     const tgt = V((P.x + apex.x) / 2, Math.max(90, (P.y + apex.y) / 2), (P.z + apex.z) / 2), D = 950;
     return rigFrom(V(tgt.x - 0.96 * D, tgt.y + D * 0.22, tgt.z + 0.27 * D), tgt); }
-  if (id === "a1") { const a = st.threats[A1i].pos, L = Math.hypot(a.x, a.z), mid = V(a.x * 0.55, a.y * 0.55, a.z * 0.55), D = L * 1.05 + 30;
-    let px = a.z / L, pz = -a.x / L; if (pz < 0) { px = -px; pz = -pz; }              // south side: sea and coast in frame, sun behind
-    return rigFrom(V(mid.x + px * D * 0.85, mid.y + D * 0.45, mid.z + pz * D * 0.85), mid); }
+  if (id === "a1") { const a = st.threats[A1i].pos, dir = V(a.x, 0, a.z).normalize();
+    const cam = V(-dir.x * 3.2 - dir.z * 1.6, 0.9, -dir.z * 3.2 + dir.x * 1.6);                     // 3-4 km behind the ship, low over the water
+    const look = V(a.x * 0.08, Math.min(a.y * 0.08, 6) + 1.2, a.z * 0.08);
+    return rigFrom(cam, look); }
   if (id === "decoys") { const b = st.threats[B1i].pos, f = B1d.path.pos(st.t + 2, V(0, 0, 0)).sub(b); const L = Math.hypot(f.x, f.z) || 1;
     return rigFrom(V(b.x - f.z / L * 55 + 10, b.y + 18, b.z + f.x / L * 55), b); }
 }
@@ -1485,7 +1605,7 @@ let flight = null, shotStart = 0;
 const ease = k => k * k * k * (k * (k * 6 - 15) + 10);
 function startFlight(now) {
   const des = shotRig(shot), dd = Math.abs(Math.log(des.dist / rig.dist)), move = rig.target.distanceTo(des.target) / Math.max(rig.dist, des.dist);
-  flight = { from: { target: rig.target.clone(), yaw: rig.yaw, pitch: rig.pitch, dist: rig.dist }, k: 0, dur: Math.min(5, 2.4 + dd * 0.35 + move * 0.8), lift: Math.min(move, 1.2) };
+  flight = { from: { target: rig.target.clone(), yaw: rig.yaw, pitch: rig.pitch, dist: rig.dist }, k: 0, dur: Math.min(3.2, 1.5 + dd * 0.22 + move * 0.5), lift: Math.min(move, 1.2) };
   shotStart = now;
 }
 function flyRig(dt, now) {
@@ -1500,7 +1620,7 @@ function flyRig(dt, now) {
   } else steerRig(des, dt);
 }
 function steerRig(des, dt) {
-  const k = 1 - Math.exp(-dt * 2.2);
+  const k = 1 - Math.exp(-dt * 3.2);
   rig.target.lerp(des.target, k); let dy = des.yaw - rig.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); rig.yaw += dy * k;
   rig.pitch += (des.pitch - rig.pitch) * k; rig.dist = Math.exp(Math.log(rig.dist) + (Math.log(des.dist) - Math.log(rig.dist)) * k);
 }
@@ -1536,29 +1656,35 @@ function place(el, p, sizePx) {
 }
 function setLbl(el, html) { const l = el._lbl || (el._lbl = el.querySelector(".lbl")); if (l && l._h !== html) { l._h = html; l.innerHTML = html; } }
 function render(realDt, now = performance.now()) {
-  // radar dwells -> beams
+  // radar dwells -> beams. Beams and glows fade out when the camera is right up against the ship (no strobing in your face)
   dwellCursor = st.dwells.length;
+  const shipDist = camera.position.length(), nearFadeG = THREE.MathUtils.smoothstep(shipDist, 0.05, 0.35); let nearFade = nearFadeG;
   st.threats.forEach((th, i) => {
     const tb = trackBeams[i];
     if (th.alive && th.stage >= 1 && th.lastUpd != null) {
       const o = FACE_POS[faceOf(th.pos)], L = o.distanceTo(th.pos), r = Math.max(L * Math.tan(BW / 2), 0.002);
       const fresh = Math.exp(-(st.t - th.lastUpd) / 0.14), hl = tb.userData.halo, sp = tb.userData.spot;
       tb.position.copy(o); tb.lookAt(th.pos); tb.scale.set(r, r, L); tb.visible = true; tb.material.uniforms.nearFrac.value = Math.min(1, 0.0042 / r);
-      tb.material.uniforms.opacity.value = 0.32 + 0.9 * fresh; tb.material.uniforms.time.value = performance.now() / 1000;
-      hl.position.copy(o); hl.quaternion.copy(tb.quaternion); const hr = Math.min(r * 3.2, r + 1.2); hl.scale.set(hr, hr, L); hl.visible = true; hl.material.uniforms.nearFrac.value = Math.min(1, 0.014 / hr); hl.material.uniforms.opacity.value = 0.09 + 0.22 * fresh;
-      const cd = camera.position.distanceTo(th.pos); sp.position.copy(th.pos); sp.scale.setScalar(Math.min(cd * (0.012 + 0.02 * fresh), 2.5)); sp.material.opacity = 0.3 + 0.6 * fresh; sp.visible = true;
-      const f = faceOf(th.pos); faceHeat[f] = Math.max(faceHeat[f], 0.35 + 0.65 * fresh);
+      tb._f = (tb._f == null ? fresh : tb._f + (fresh - tb._f) * (1 - Math.exp(-realDt * 5))); const fs = tb._f;
+      { const ax = tmp2.copy(th.pos).sub(o), Lb = ax.length(); ax.divideScalar(Lb); const rel = lerpTmp.copy(camera.position).sub(o), along = THREE.MathUtils.clamp(rel.dot(ax), 0, Lb);
+        const perp = rel.addScaledVector(ax, -along).length(), rad = Math.max(along * Math.tan(BW / 2) * 3.2, 0.004);
+        tb._inside = THREE.MathUtils.smoothstep(perp / rad, 1.2, 4.0) * THREE.MathUtils.smoothstep(perp, 0.04, 0.25); }
+      const nearFade = nearFadeG * tb._inside;
+      tb.material.uniforms.opacity.value = (0.32 + 0.9 * fs) * nearFade; tb.material.uniforms.time.value = now / 1000;
+      hl.position.copy(o); hl.quaternion.copy(tb.quaternion); const hr = Math.min(r * 3.2, r + 1.2); hl.scale.set(hr, hr, L); hl.visible = true; hl.material.uniforms.nearFrac.value = Math.min(1, 0.014 / hr); hl.material.uniforms.opacity.value = (0.09 + 0.22 * fs) * nearFade;
+      const cd = camera.position.distanceTo(th.pos); sp.position.copy(th.pos); sp.scale.setScalar(Math.min(cd * (0.012 + 0.02 * fs), 2.5)); sp.material.opacity = 0.3 + 0.6 * fs; sp.visible = true;
+      const f = faceOf(th.pos); faceHeat[f] = Math.max(faceHeat[f], 0.35 + 0.65 * fs);
     } else { tb.visible = false; tb.userData.halo.visible = false; tb.userData.spot.visible = false; }
   });
-  faceGlow.forEach((g, f) => { const fb = (45 + 90 * f) * Math.PI / 180; g.position.copy(FACE_POS[f]).add(tmp.set(Math.sin(fb) * 0.004, 0, -Math.cos(fb) * 0.004)); const cd = camera.position.distanceTo(FACE_POS[f]); g.scale.setScalar(Math.min(0.06, Math.max(0.012, cd * 0.03))); g.material.opacity = faceHeat[f] * 0.75; faceHeat[f] *= 0.9; });
+  faceGlow.forEach((g, f) => { const fb = (45 + 90 * f) * Math.PI / 180; g.position.copy(FACE_POS[f]).add(tmp.set(Math.sin(fb) * 0.004, 0, -Math.cos(fb) * 0.004)); const cd = camera.position.distanceTo(FACE_POS[f]); g.scale.setScalar(Math.min(0.06, Math.max(0.012, cd * 0.03))); g._o = (g._o || 0) + (faceHeat[f] * 0.6 * nearFade - (g._o || 0)) * (1 - Math.exp(-realDt * 4)); g.material.opacity = g._o; faceHeat[f] *= 0.9; });
   if (playing) { // search raster (visual): SPY-6 many simultaneous receive beams per face, SPY-1D one at a time
     const n = mode === "spy6" ? 3 : 1;
-    for (let f = 0; f < 4; f++) for (let j = 0; j < n; j++) if (Math.random() < realDt * (mode === "spy6" ? 9 : 5)) {
+    for (let f = 0; f < 4; f++) for (let j = 0; j < n; j++) if (nearFade > 0.2 && Math.random() < realDt * (mode === "spy6" ? 5 : 3)) {
       const az = THREE.MathUtils.degToRad(f * 90 + 5 + Math.random() * 80), el = THREE.MathUtils.degToRad(Math.random() * 35);
       const L = 60; fireBeam(f, V(Math.sin(az) * Math.cos(el) * L, Math.sin(el) * L, -Math.cos(az) * Math.cos(el) * L), false);
     }
   }
-  beamPool.forEach(s => { if (!s.b.visible) return; s.life -= realDt; if (s.life <= 0) { s.b.visible = false; return; } s.b.material.uniforms.opacity.value = s.peak * 1.6 * (s.life / s.max); });
+  beamPool.forEach(s => { if (!s.b.visible) return; s.life -= realDt; if (s.life <= 0) { s.b.visible = false; return; } const u = s.life / s.max; s.b.material.uniforms.opacity.value = s.peak * 1.6 * Math.sin(Math.PI * u) * nearFade; });
 
   const fpx = focalPx();
   st.threats.forEach((th, i) => {
@@ -1576,21 +1702,35 @@ function render(realDt, now = performance.now()) {
         if (boosting) o.m.body.userData.plume.scale.set(1, 0.9 + Math.random() * 0.25, 1);
       }
       if (playing && (d.kind !== "bm" || (st.t - d.path.t0) / d.path.T < d.path.boost + 0.02)) trailPush(o.trail, th.pos);
+      if (playing && d.kind === "bm" && (st.t - d.path.t0) / d.path.T < d.path.boost) {         // booster exhaust column
+        const lp = o._bp || th.pos.clone(), n = Math.min(10, Math.ceil(lp.distanceTo(th.pos) / 0.25));
+        for (let k = 0; k < n; k++) smk.emit(lerpTmp.lerpVectors(lp, th.pos, k / n), 40, 900, 160, 0.85, 0.05);
+        o._bp = th.pos.clone();
+      }
     }
     // interceptor
     renderGun(th, i);
-    const flying = th.stage >= 4 && !th.deadAt && !WEAPON[d.weapon].gun;
+    const flying = th.stage >= 4 && !th.deadAt && !WEAPON[d.weapon].gun && st.t >= th.tLaunch;
     o.w.g.visible = flying;
     if (flying) {
       const p = interceptorPos(th, st.t, V(0, 0, 0)), q = interceptorPos(th, st.t + 0.2, V(0, 0, 0)).sub(p);
       o.w.g.position.copy(p); if (q.lengthSq() > 1e-12) o.w.g.quaternion.setFromUnitVectors(Z, q.normalize());
       o.w.g.scale.setScalar(visScale(p, o.w.len) * M);
       o.w.g.userData.plume.visible = (st.t - th.tLaunch) < (th.tInt - th.tLaunch) * 0.7 && camera.position.distanceTo(p) < 40;
-      if (playing) trailPush(o.wTrail, p);
+      if (playing) {
+        trailPush(o.wTrail, p);
+        if (!o._vls) { o._vls = true; launchAt = st.t; for (let k = 0; k < 46; k++) smk.emit(LAUNCH, 6, 70, 45, 0.92, 0.012); }   // launch cloud off the deck
+        if (p.y < 40 && (st.t - th.tLaunch) < (th.tInt - th.tLaunch) * 0.6) {                                                    // rocket motor smoke trail
+          const lp = o._lp || LAUNCH, n = Math.min(14, Math.ceil(lp.distanceTo(p) / 0.03));
+          for (let k = 0; k < n; k++) smk.emit(lerpTmp.lerpVectors(lp, p, k / n), 4, 60 + Math.min(p.y, 20) * 6, 80, 0.9, 0.002);
+        }
+        o._lp = p.clone();
+      }
       place(intEls[i], p, Math.max(14, visScale(p, o.w.len) * o.w.len * M / camera.position.distanceTo(p) * fpx));
       intEls[i].className = "trk friend"; setLbl(intEls[i], `Our ${d.weapon}`);
     } else intEls[i].hidden = true;
     // intercept flash + smoke
+    if (th.deadAt && playing && !o._ks) { o._ks = true; if (th.intPoint.y < 30) for (let k = 0; k < 30; k++) smk.emit(th.intPoint, 10, 140, 70, 0.18 + Math.random() * 0.25, 0.04); }
     if (th.deadAt) {
       const age = st.t - th.deadAt, sz = Math.max(0.03, camera.position.distanceTo(th.intPoint) * 0.012);
       o.flash.position.copy(th.intPoint); o.flash.scale.setScalar(2.4 * sz * (0.6 + age * 1.2)); o.flash.material.opacity = Math.max(0, 1 - age / 1.6);
@@ -1678,16 +1818,29 @@ function render(realDt, now = performance.now()) {
   if (now - uiT > 90) { uiT = now; drawScopes(st); renderBoard(); renderLog(); syncStatus(); if (!$("drawer").classList.contains("closed") && !$("pResults").hidden) drawLanes(); }
 }
 
-function resize() { const w = view.clientWidth, h = view.clientHeight; renderer.setSize(w, h, false); camera.aspect = w / Math.max(h, 1); camera.updateProjectionMatrix(); }
+function setupPost() {
+  if (!THREE.EffectComposer || !THREE.UnrealBloomPass || !THREE.ShaderPass || !THREE.RenderPass) return;   // CDN missing: plain render
+  try {
+    const w = Math.max(view.clientWidth, 1), h = Math.max(view.clientHeight, 1);
+    const opts = { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBAFormat, type: THREE.HalfFloatType };
+    const rt = renderer.capabilities.isWebGL2 && THREE.WebGLMultisampleRenderTarget ? new THREE.WebGLMultisampleRenderTarget(w * pixRatio, h * pixRatio, opts) : new THREE.WebGLRenderTarget(w * pixRatio, h * pixRatio, opts);
+    composer = new THREE.EffectComposer(renderer, rt);
+    composer.addPass(new THREE.RenderPass(scene, camera));
+    bloomPass = new THREE.UnrealBloomPass(new THREE.Vector2(w, h), 0.5, 0.55, 0.86); composer.addPass(bloomPass);
+    finalPass = new THREE.ShaderPass(FINAL); composer.addPass(finalPass);
+  } catch (e) { composer = null; }
+}
+function resize() { const w = view.clientWidth, h = view.clientHeight; renderer.setSize(w, h, false);
+  if (composer) { composer.setPixelRatio(pixRatio); composer.setSize(w, h); finalPass.uniforms.res.value.set(w * pixRatio, h * pixRatio); } camera.aspect = w / Math.max(h, 1); camera.updateProjectionMatrix(); }
 window.addEventListener("resize", resize);
 let last = performance.now();
-let ftEMA = 16, perfT = 0, uiT = 0, frameN = 0;
+let ftEMA = 16, perfT = 0, uiT = 0, frameN = 0; const lerpTmp2 = new THREE.Vector2();
 function quiet() {   // nothing tracked and nothing in flight: skip ahead faster so the viewer isn't waiting
   return !st.threats.some(th => th.alive && th.stage >= 1) && !st.threats.some(th => th.tLaunch != null && th.deadAt && st.t - th.deadAt < 6) && !$("callout").classList.contains("on") && !chapUntil;
 }
 function frame(now) {
   const rawDt = (now - last) / 1000, realDt = Math.min(rawDt, 0.1); last = now; frameN++;
-  if (playing) { const ff = quiet() ? 3 : 1; st.ff = ff > 1; acc += realDt * speed * PLAYBACK * ff; let n = 0; while (acc >= 0.05 && n++ < 400) { step(st, 0.05); acc -= 0.05; } if (st.t >= END_T || doneAt(st)) { setPlaying(false); endOfRun(); } }
+  if (playing) { const ff = activeGun() >= 0 ? 0.45 : quiet() ? 3 : 1; st.ff = ff > 1; acc += realDt * speed * PLAYBACK * ff; let n = 0; while (acc >= 0.05 && n++ < 400) { step(st, 0.05); acc -= 0.05; } if (st.t >= END_T || doneAt(st)) { setPlaying(false); endOfRun(); } }
   runChapters(now);
   moveCamera(realDt);
   applyRig();
@@ -1699,15 +1852,20 @@ function frame(now) {
   const nearShip = camera.position.length() < 4; ship.visible = camera.position.length() < 400;
   if (nearShip && frameN % 2 === 0) renderer.shadowMap.needsUpdate = true;
   render(realDt, now);
-  renderer.render(scene, camera);
+  smk.m.uniforms.now.value = st.t; smk.m.uniforms.fogD.value = scene.fog.density;
+  smk.m.uniforms.scale.value = renderer.getDrawingBufferSize(lerpTmp2).y / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
+  { const a = st.t - launchAt, cd = camera.position.distanceTo(LAUNCH); launchFlash.position.copy(LAUNCH); launchFlash.scale.setScalar(Math.max(0.03, cd * 0.04) * (1 + a)); launchFlash.material.opacity = a >= 0 && a < 1.2 ? (1 - a / 1.2) : 0; }
+  smk.flush();
+  if (composer) { finalPass.uniforms.time.value = now / 1000; composer.render(); } else renderer.render(scene, camera);
   // adaptive resolution: keep the frame rate up on slower laptops
   if (rawDt < 0.5) ftEMA = ftEMA * 0.95 + rawDt * 1000 * 0.05;
   if (now - perfT > 1500) { perfT = now;
+    if (ftEMA > 30 && pixRatio <= 0.7 && bloomPass && bloomPass.enabled) bloomPass.enabled = false;
     if (ftEMA > 24 && pixRatio > 0.7) { pixRatio = Math.max(0.7, pixRatio - 0.15); renderer.setPixelRatio(pixRatio); resize(); }
     else if (ftEMA < 13 && pixRatio < PR_MAX) { pixRatio = Math.min(PR_MAX, pixRatio + 0.1); renderer.setPixelRatio(pixRatio); resize(); } }
   requestAnimationFrame(frame);
 }
-resize(); restart(); requestAnimationFrame(frame);
+setupPost(); resize(); restart(); requestAnimationFrame(frame);
 window.__seek = t => { while (st.t < t) step(st, 0.05); }; // jump the scenario clock (used for testing)
 window.__look = (x, y, z, yaw, pitch, dist) => { manual(); follow = null; camAnim = null; Object.assign(rig, { target: V(x, y, z), yaw, pitch, dist }); };
 })();

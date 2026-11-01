@@ -1,40 +1,65 @@
-# SPY-6 vs SPY-1D: Flight III Kill Chain Simulation
+# SPY-6 vs SPY-1D: physics model and kill-chain simulation
 
-Interactive 3D simulation for a PHYS 271 (Electricity & Magnetism) project at the University of San Diego.
+PHYS 271 project. James Baird.
 
-**Live:** https://jcameronbaird04-gif.github.io/spy6-sim/
+Why the AN/SPY-6(V)1 radar on Flight III destroyers outperforms the AN/SPY-1D it replaces: the
+phased-array physics behind the published +15 dB sensitivity gain, and an interactive 3D
+simulation of the same raid against both radars.
 
-The attack plays in three parts so one thing happens at a time: (1) ballistic missiles, one aimed at the ship and one through space with decoys; (2) a jamming aircraft plus drones and cruise missiles low over the water; (3) an eight-drone swarm. A Flight III destroyer defends against a Red Sea style raid: drones, cruise missiles, an anti-ship
-ballistic missile, a ballistic missile in space with decoys, an 8-drone swarm and a stand-off jammer.
-Press Play, then switch the radar between **SPY-6** and **SPY-1D** and run the same raid again.
+**Live simulation:** https://jcameronbaird04-gif.github.io/spy6-sim/
 
-## What to watch for (the five advantages)
+> Radar ranges, target sizes, jamming loss and discrimination times are illustrative values chosen
+> to show the physics. The only number taken from published SPY-6 data is the +15 dB sensitivity
+> gain (NAVSEA), which fixes the 2.37× range ratio between the radars.
 
-| # | Advantage | What happens in the sim |
-|---|-----------|------------------------|
-| 1 | Range | SPY-6 detects the anti-ship ballistic missile at 215 nm; SPY-1D at 102 nm (5:15 vs 1:40 of warning) |
-| 2 | Capacity | During the swarm SPY-1D loses 42 tracks and has to re-find them; SPY-6 loses none |
-| 3 | Jamming | A jammer turns on at T+2:40, bearing 100. SPY-6 nulls it; SPY-1D keeps only 15% of its range in that sector, so drones there are seen much later |
-| 4 | Discrimination | The ballistic missile releases 3 decoys. SPY-6 picks the warhead in 6 s, SPY-1D in about 40 s |
-| 5 | Availability | Covered in the paper and charts (SPY-1 calibration downtime, SPY-6 graceful degradation) |
+## Layout
 
-## Getting data out
+| Path | What it is |
+| --- | --- |
+| `index.html` | Interactive 3D kill-chain simulation (three.js r128), served by GitHub Pages |
+| `analysis/spy6_five_advantages.py` | The paper's result figures (Fig 1–6) |
+| `analysis/spy6_model_v3.py` | Phased-array model and the SPY-1 1.7° validation figure |
+| `analysis/spy6_common.py` | Shared constants, plot style and array physics |
+| `analysis/archive/` | Earlier drafts (v1, v2), kept for the record |
+| `tests/` | Checks against textbook results and the numbers quoted in the paper |
+| `scenario.yaml` | The simulated raid and the numbers behind it |
+| `figures/` | Generated PNGs, one folder per script (not committed) |
 
-Open **Data → Results** and press **Download results (CSV)**. You get every threat for both radars (detection time and range, ID, weapon launch, intercept time, range and altitude, warning time, tracks lost), track-update statistics and the full event log.
+## Running
 
-## Controls
+```bash
+python -m pip install -r requirements.txt
+```
 
-Drag to look around (drag up to look into the sky) · right-drag or W A S D to move · Q / E down / up ·
-scroll to zoom · click a track to follow it. **Auto** camera (on by default) cuts to each event; any manual move turns it off.
+```bash
+python analysis/spy6_five_advantages.py
+```
 
-## Files
+```bash
+python analysis/spy6_model_v3.py
+```
 
-- `index.html`: the whole simulation (three.js r128, loaded from cdnjs)
-- `scenario.yaml`: the scenario and the numbers behind it
+```bash
+pytest
+```
 
-## Honesty notes
+Figures go to `figures/paper/` and `figures/model_v3/`; pass `--out DIR` to change that. Runs are
+deterministic (random seed 271).
 
-Built from open sources only. The +15 dB (~30x) sensitivity and the 144-module / 37-RMA array come from
-NAVSEA and CSIS. Ranges, target sizes, jamming loss and discrimination times are illustrative values chosen
-to show the physics; they are not classified performance figures. Both radars defeat the raid, as USS Carney
-did with SPY-1D in 2023; the difference is time and margin.
+To view the simulation locally, serve the folder rather than opening the file directly:
+
+```bash
+python -m http.server 8000
+```
+
+then open http://localhost:8000.
+
+## Physics
+
+- Radar range equation: R⁴ = P_t G A_e σ / ((4π)² S_min), so R ∝ (S σ)^¼
+- Active array of N T/R modules: P_t ∝ N, G ∝ N, A_e ∝ N, so S ∝ N³
+- Array factor: AF(θ) = Σ wₙ exp(i n k d (sin θ − sin θ₀))
+- Range resolution: Δr = c / 2B
+
+Assumptions: 3.3 GHz; 144 modules per RMA as a 12×12 grid (5.08 cm spacing); isotropic elements;
+no clutter. See `AUDIT.md` for the review of this code and the open questions it raised.

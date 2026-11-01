@@ -202,7 +202,7 @@ dt { color: var(--ink); } dd { margin: 0; color: var(--ink-2); }
 
   <div class="hud">
     <div class="l"><span class="clock" id="fClock">T+00:00</span><span class="radar" id="fRadar">AN/SPY-6(V)1</span><span class="meta" id="fRate">Standby</span></div>
-    <div class="r"><div class="counts">Tracks <b id="fTrk">0</b> &nbsp;&middot;&nbsp; Kills <b id="fKill">0/17</b></div><div class="vs" id="status"></div></div>
+    <div class="r"><div class="counts">Tracks <b id="fTrk">0</b> &nbsp;&middot;&nbsp; Kills <b id="fKill">0</b></div><div class="vs" id="status"></div></div>
   </div>
   <div class="chapline" id="fChap"></div>
   <div class="camtag" id="camtag">Auto camera</div>
@@ -291,7 +291,8 @@ const RE = 6371, KE = 4 / 3, RADAR_H = 0.025;     // array ~25 m above the water
 const R0 = 400;                                     // illustrative SPY-1D range on a 1 m^2 target (km)
 const GAIN = { spy1: 1, spy6: Math.pow(10, 1.5) };  // +15 dB
 const PLAYBACK = 8;                     // 1x = 8x real time
-const ACT2 = 220;                       // low fliers launch after the ballistic act is under way
+const ACT2 = 220; const SPY1_TRACKS_PER_SLOT = 3; const SWARM_N = 30;
+const SPY1_FACE_CAP = 2 * SPY1_TRACKS_PER_SLOT * 4 - 1;   // 23 tracks per face: 6 updates/s keeps each inside the 4 s limit, with a one-track margin                       // low fliers launch after the ballistic act is under way
 const NM = 1.852, KT = 1943.84;
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const ORIGIN = V(0, 0, 0);
@@ -332,11 +333,12 @@ const THREATS = [
   { id: "B1", tn: 1007, name: "Ballistic missile (space)", cls: "MRBM", kind: "bm", rcs: 0.2, len: 14, weapon: "SM-3", decoys: 3, path: ballistic(V(250, 0, 350), V(-250, 0, -1450), 250, 40, 720) },
   { id: "D4", tn: 1008, name: "Drone 4", cls: "UAV", kind: "drone", rcs: 0.1, len: 3.5, weapon: "5-inch", path: straight(V(12, 0, -24), 0.03, 0.0514, ACT2 + 300, 0.3) },
   { id: "D5", tn: 1009, name: "Drone 5 (pop-up)", cls: "UAV", kind: "drone", rcs: 0.05, len: 2.5, weapon: "CIWS", path: straight(V(4.5, 0, 4.5), 0.015, 0.06, ACT2 + 420, 0.15) },
-  // drone swarm: eight Shahed-type drones from one direction, so they all load the same array face (capacity showcase)
-  ...[60, 63, 66, 69, 72, 75, 78, 81].map((b, k) => {
-    const r = 48 + (k % 3) * 0.8, a = b * Math.PI / 180;
+  // drone swarm: 30 Shahed-type drones from one direction, so they all load the same array face (capacity showcase).
+  // Heavier than Carney's 19-threat raid on purpose: it is sized past SPY-1D's ~24-tracks-per-face limit.
+  ...Array.from({ length: SWARM_N }, (_, k) => 50 + k * 1.3).map((b, k) => {
+    const r = 48 + (k % 4) * 0.7, a = b * Math.PI / 180;
     return { id: "S" + (k + 1), tn: 1010 + k, name: `Swarm drone ${k + 1}`, cls: "UAV", kind: "drone", swarm: true, rcs: 0.1, len: 3.5, weapon: "SM-2",
-      path: straight(V(Math.sin(a) * r, 0, -Math.cos(a) * r), 0.05, 0.0514, ACT2 + 340 + k * 1.5, 0.4) };
+      path: straight(V(Math.sin(a) * r, 0, -Math.cos(a) * r), 0.05, 0.0514, ACT2 + 340 + k * 1.0, 0.4) };
   }),
 ];
 // stand-off jammer aircraft (jamming showcase): orbits east of the ship, noise-jamming one sector
@@ -351,10 +353,10 @@ const STAGES = ["Detect", "Track", "ID", "Engage", "Midcourse", "Terminal", "Ass
 
 // =============================================================== combat system model
 function newState(mode) {
-  return { mode, t: 0, events: [], faces: [0, 1, 2, 3].map(i => ({ i, clock: i * 0.03, slot: 0, rr: 0, searchProg: 0 })),
+  return { mode, t: 0, events: [], faces: [0, 1, 2, 3].map(i => ({ i, clock: i * 0.03, slot: 0, rr: 0, searchProg: 0 })), waitNow: 0, peakWait: 0,
     nextSearch6: [0.1, 0.35, 0.6, 0.85], updates: [], callouts: [], flags: {},
     threats: THREATS.map(d => ({ d, stage: 0, looks: 0, alive: true, outcome: null, pos: V(0, -99, 0), seen: null, seenAt: 0,
-      tDet: null, tAcq: null, dDet: null, tId: null, lost: 0, wasted: 0, lostAt: null, tLaunch: null, tInt: null, intPoint: null, nextUpd: 0, lastUpd: null, ints: null })) };
+      tDet: null, tAcq: null, dDet: null, tId: null, lost: 0, wasted: 0, waiting: false, lostAt: null, tLaunch: null, tInt: null, intPoint: null, nextUpd: 0, lastUpd: null, ints: null })) };
 }
 const tmp = V(0, 0, 0), tmp2 = V(0, 0, 0);
 const say = (st, msg) => st.events.push({ t: st.t, msg });
@@ -412,24 +414,42 @@ function step(st, dt) {
       for (const th of st.threats) if (th.alive && th.stage === 0 && st.t >= th.d.path.t0 && faceOf(th.pos) === f && covered(th, mode, st)) detect(st, th);
     }
   } else {
-    // one beam per face, 0.1 s per dwell: 2 of every 10 dwells go to tracks, the rest to search; a search frame needs 10 search dwells
+    // one beam per face, 0.1 s scheduling slots: 2 of every 10 slots go to tracks (3 track updates per slot), the rest to search;
+    // a search frame needs 10 search slots. 6 track updates/s per face keeps ~24 tracks per face (~100 for the ship) inside the
+    // 4 s lost-track limit, matching the published SPY-1 "more than 100 targets". Same numbers as Fig 2 (analysis/spy6_five_advantages.py).
     for (const face of st.faces) {
       face.clock += dt;
       while (face.clock >= 0.1) {
         face.clock -= 0.1;
-        const mine = st.threats.filter(th => live(th) && faceOf(th.pos) === face.i);
+        let mine = st.threats.filter(th => live(th) && faceOf(th.pos) === face.i);
+        if (mine.length > SPY1_FACE_CAP) {
+          // track management: keep engaged threats first, then the closest; the rest are dropped until capacity frees up
+          mine.sort((a, b) => (b.stage >= 4) - (a.stage >= 4) || a.pos.length() - b.pos.length());
+          for (const th of mine.slice(SPY1_FACE_CAP)) {
+            if (th.stage >= 4) { if (st.t >= th.tLaunch) th.wasted++; Object.assign(th, { tLaunch: null, tInt: null, intPoint: null, saidAway: false }); }
+            th.stage = 0; th.looks = 0; th.waiting = true; say(st, `RADAR FULL: face track load at limit, ${th.d.tn} dropped until capacity frees`);
+          }
+          mine = mine.slice(0, SPY1_FACE_CAP);
+        }
         const slot = face.slot++ % 10;
         if (slot < 2 && mine.length) {
-          look(st, mine[face.rr++ % mine.length]);
+          // least-recently-updated first, so no track is skipped when the list changes
+          mine.slice().sort((a, b) => a.lastUpd - b.lastUpd).slice(0, SPY1_TRACKS_PER_SLOT).forEach(th => look(st, th));
         } else {
           if (++face.searchProg >= 10) {
             face.searchProg = 0;
-            for (const th of st.threats) if (th.alive && th.stage === 0 && st.t >= th.d.path.t0 && faceOf(th.pos) === face.i && covered(th, mode, st)) detect(st, th);
+            let held = mine.length;
+            for (const th of st.threats) if (th.alive && th.stage === 0 && st.t >= th.d.path.t0 && faceOf(th.pos) === face.i && covered(th, mode, st)) {
+              if (held < SPY1_FACE_CAP) { detect(st, th); th.waiting = false; held++; }
+              else if (!th.waiting) { th.waiting = true; say(st, `RADAR FULL: ${th.d.tn} seen in search but no track capacity on this face`); }
+            }
           }
         }
       }
     }
   }
+  st.waitNow = st.threats.filter(th => th.alive && th.waiting && th.stage === 0).length; st.peakWait = Math.max(st.peakWait, st.waitNow);
+  if (st.waitNow && !st.flags.full) { st.flags.full = true; st.callouts.push({ t: st.t, key: "full" }); }
   for (const th of st.threats) {
     if (th.stage === 1 && th.looks >= 3) { th.stage = 2; say(st, `TRACK ${th.d.tn} firm, ${(th.pos.length() / NM).toFixed(0)} nm`); }
     if (th.stage === 2 && th.d.decoys) {
@@ -1134,19 +1154,22 @@ const A1i = THREATS.findIndex(d => d.id === "A1");
 const avgArr = arr => arr.reduce((s, v) => s + v, 0) / Math.max(arr.length, 1);
 const maxArr = arr => arr.reduce((m, v) => Math.max(m, v), arr.length ? -Infinity : 0);   // no spread: safe on long arrays
 const lostTotal = m => RUNS[m].threats.reduce((s, t) => s + t.lost, 0);
+const warnT = th => th.d.path.t0 + th.d.path.T - th.tDet;     // warning time: first detection to when it would reach the ship
+const swarmClear = m => Math.max(...RUNS[m].threats.filter(t => t.d.swarm).map(t => t.tInt || 0));
 const wastedTotal = m => RUNS[m].threats.reduce((s, t) => s + t.wasted, 0);
 const killCount = m => RUNS[m].threats.filter(t => t.outcome === "Destroyed").length;
 function calloutText(key, m) {
   const lost1 = lostTotal("spy1"), lost6 = lostTotal("spy6");
   const n6 = (RUNS.spy6.threats[A1i].dDet / NM).toFixed(0), n1 = (RUNS.spy1.threats[A1i].dDet / NM).toFixed(0);
-  const w6 = mmss(RUNS.spy6.threats[A1i].tInt - RUNS.spy6.threats[A1i].tDet), w1 = mmss(RUNS.spy1.threats[A1i].tInt - RUNS.spy1.threats[A1i].tDet);
+  const w6 = mmss(warnT(RUNS.spy6.threats[A1i])), w1 = mmss(warnT(RUNS.spy1.threats[A1i]));
   const T = {
-    range: ["Range", m === "spy6" ? `SPY-6 spots the missile aimed at the ship <b>${n6} nautical miles</b> out, almost as soon as it launches. The crew gets <b>${w6}</b> to shoot it down. The older radar would not see it until ${n1} nm.`
-                                 : `SPY-1D finally spots the missile aimed at the ship, only <b>${n1} nautical miles</b> out. The crew gets <b>${w1}</b> to shoot it down, instead of ${w6} with SPY-6.`, m === "spy1"],
-    swarm: ["Capacity", m === "spy6" ? `Eight drones at once. SPY-6 points a separate beam at every drone at the same time, so it never loses sight of any of them.`
-                                     : `Eight drones at once. SPY-1D has one beam per side of the ship and has to take turns, so it keeps losing drones, and the interceptors it already fired at them, and has to search again.`, m === "spy1"],
+    range: ["Range", m === "spy6" ? `SPY-6 spots the missile aimed at the ship <b>${n6} nautical miles</b> out, almost as soon as it launches. That is <b>${w6}</b> of warning before it would hit. The older radar would not see it until ${n1} nm.`
+                                 : `SPY-1D finally spots the missile aimed at the ship, only <b>${n1} nautical miles</b> out. That leaves <b>${w1}</b> of warning before it would hit, instead of ${w6} with SPY-6.`, m === "spy1"],
+    swarm: ["Capacity", m === "spy6" ? `${SWARM_N} drones at once. SPY-6 points a separate beam at every drone at the same time, so it never loses sight of any of them.`
+                                     : `${SWARM_N} drones at once. SPY-1D shares one beam per side of the ship between searching and tracking, so each side can only hold about ${SPY1_FACE_CAP} tracks.`, m === "spy1"],
     jam: ["Jamming", m === "spy6" ? `An enemy aircraft is blasting radio noise at the ship. SPY-6 can tune out noise from one direction, so it still sees almost as far as before.`
                                   : `An enemy aircraft is blasting radio noise at the ship. SPY-1D can't tune it out, so in that direction it can only see <b>${Math.round(JAM.loss.spy1 * 100)}%</b> as far.`, m === "spy1"],
+    full: ["Capacity", `SPY-1D's side facing the swarm is full: it is holding ${SPY1_FACE_CAP} tracks, so up to <b>${RUNS.spy1.peakWait}</b> drones fly in untracked and can't be engaged until a slot frees up. SPY-6 tracks all ${SWARM_N}.`, true],
     lost: ["Capacity", `SPY-1D just lost track of a drone and has to find it again. It loses <b>${lost1}</b> tracks during this attack; SPY-6 loses ${lost6}.`, true],
     discrim: ["Decoys", m === "spy6" ? `The missile in space just released 3 decoys. SPY-6's sharper picture tells the real warhead apart in <b>${DISCRIM.spy6} seconds</b>, so the interceptor launches early.`
                                      : `The missile in space released 3 decoys. SPY-1D needs about <b>${DISCRIM.spy1} seconds</b> to tell which one is real, so the interceptor launches late.`, m === "spy1"],
@@ -1371,24 +1394,24 @@ function fillCompare() {
   const busy = maxArr(RUNS.spy1.updates);
   const a1 = RUNS.spy1.threats[A1i], a6 = RUNS.spy6.threats[A1i];
   const b1r = RUNS.spy1.threats[B1i], b6r = RUNS.spy6.threats[B1i];
-  const warnS = th => th.tInt != null && th.tDet != null ? `${(th.tInt - th.tDet).toFixed(0)} s` : "no";
+  const warnS = th => th.tDet != null ? `${warnT(th).toFixed(0)} s` : "no";
   const dies = th => th.tInt != null ? `T+${mmss(th.tInt)}` : `never (${(th.outcome || "not engaged").toLowerCase()})`;
   const skimNm = (horizonKm(0.02) / NM).toFixed(0);   // sea-skimmer cruise altitude: 20 m
   const jammed = THREATS.filter((d, i) => { const x = RUNS.spy1.threats[i], y = RUNS.spy6.threats[i]; return x.dDet != null && y.dDet != null && y.dDet - x.dDet > 5 && d.kind !== "bm"; }).length;
-  $("summary").innerHTML = `<b>Range.</b> SPY-6 picks up the anti-ship ballistic missile at <b>${(a6.dDet / NM).toFixed(0)} nm</b> vs ${(a1.dDet / NM).toFixed(0)} nm, giving <b>${warnS(a6)}</b> of warning instead of ${warnS(a1)}. `
-    + `<b>Capacity.</b> Track updates every <b>${avgArr(RUNS.spy6.updates).toFixed(2)} s</b> vs ${avgArr(RUNS.spy1.updates).toFixed(1)} s (worst ${busy.toFixed(1)} s); tracks lost: <b>${lostTotal("spy6")}</b> vs ${lostTotal("spy1")}; interceptors wasted when their track was lost in flight: <b>${wastedTotal("spy6")}</b> vs ${wastedTotal("spy1")}. `
+  $("summary").innerHTML = `<b>Range.</b> SPY-6 picks up the anti-ship ballistic missile at <b>${(a6.dDet / NM).toFixed(0)} nm</b> vs ${(a1.dDet / NM).toFixed(0)} nm, giving <b>${warnS(a6)}</b> of warning before impact instead of ${warnS(a1)}. `
+    + `<b>Capacity.</b> Track updates every <b>${avgArr(RUNS.spy6.updates).toFixed(2)} s</b> vs ${avgArr(RUNS.spy1.updates).toFixed(1)} s (worst ${busy.toFixed(1)} s); most threats left untracked at once (radar full): <b>${RUNS.spy6.peakWait}</b> vs ${RUNS.spy1.peakWait}; ${SWARM_N}-drone swarm destroyed by <b>T+${mmss(swarmClear("spy6"))}</b> vs T+${mmss(swarmClear("spy1"))}; tracks lost: ${lostTotal("spy6")} vs ${lostTotal("spy1")}; interceptors wasted: ${wastedTotal("spy6")} vs ${wastedTotal("spy1")}. `
     + `<b>Jamming.</b> ${jammed} low-flying threats in the jammed sector are seen later by SPY-1D; SPY-6 is unaffected. `
     + `<b>Discrimination.</b> The missile in space is destroyed at ${dies(b6r)} with SPY-6 vs ${dies(b1r)} with SPY-1D. `
     + `Sea-skimmers outside the jammed sector stay below the radar horizon until about ${skimNm} nm, so both radars see those at the same range: that limit is geometry, not radar power.`;
 }
 fillCompare();
-const lanes = document.getElementById("lanes"), lx = fitCanvas(lanes);
-const SHORT = ["Drone 1", "Drone 2", "Drone 3", "Cruise 1", "Cruise 2", "Missile at ship", "Space missile", "Drone 4", "Drone 5", ...[1, 2, 3, 4, 5, 6, 7, 8].map(k => "Swarm " + k)];
+const lanes = document.getElementById("lanes"); lanes.setAttribute("height", THREATS.length * (THREATS.length > 20 ? 10 : 17) + 24); const lx = fitCanvas(lanes);
+const SHORT = ["Drone 1", "Drone 2", "Drone 3", "Cruise 1", "Cruise 2", "Missile at ship", "Space missile", "Drone 4", "Drone 5", ...Array.from({ length: SWARM_N }, (_, k) => "Swarm " + (k + 1))];
 const NR = THREATS.length;
 const laneEnd = Math.ceil(Math.max(...["spy1", "spy6"].flatMap(m => RUNS[m].threats.map(t => t.tInt || 0))) / 60 + 0.5) * 60;
 function drawLanes() {
-  const W = 300, rowH = 17, H = NR * rowH + 24, x0 = 82, x1 = W - 6, tx = t => x0 + (x1 - x0) * t / laneEnd;
-  lx.clearRect(0, 0, W, H); lx.font = "11px 'Roboto Condensed', sans-serif"; lx.textBaseline = "middle";
+  const W = 300, rowH = NR > 20 ? 10 : 17, H = NR * rowH + 24, x0 = 82, x1 = W - 6, tx = t => x0 + (x1 - x0) * t / laneEnd;
+  lx.clearRect(0, 0, W, H); lx.font = (NR > 20 ? "9px" : "11px") + " 'Roboto Condensed', sans-serif"; lx.textBaseline = "middle";
   const stepM = laneEnd > 600 ? 2 : 1; for (let m = 0; m <= laneEnd / 60; m += stepM) { const X = tx(m * 60); lx.strokeStyle = "rgba(255,255,255,.07)"; lx.beginPath(); lx.moveTo(X, 0); lx.lineTo(X, NR * rowH); lx.stroke(); lx.fillStyle = "rgba(255,255,255,.4)"; lx.textAlign = "center"; lx.fillText(m + "m", X, NR * rowH + 10); }
   THREATS.forEach((d, i) => {
     const y = i * rowH; lx.textAlign = "left"; lx.fillStyle = "rgba(255,255,255,.7)"; lx.fillText(SHORT[i], 0, y + rowH / 2);
@@ -1442,13 +1465,14 @@ document.querySelectorAll(".tabs button").forEach(b => b.addEventListener("click
 }));
 function endOfRun() {
   const x = RUNS.spy1.threats, y = RUNS.spy6.threats;
-  const warn = t => t.tInt != null && t.tDet != null ? mmss(t.tInt - t.tDet) : "—";
+  const warn = t => t.tDet != null ? mmss(warnT(t)) : "—";
   const jamIdx = THREATS.map((d, i) => i).filter(i => x[i].dDet != null && y[i].dDet != null && y[i].dDet - x[i].dDet > 5 && THREATS[i].kind === "drone");
   const jamNm = m => Math.min(...jamIdx.map(i => RUNS[m].threats[i].dDet)) / NM;
   const rows = [
-    ["Warning time on the missile aimed at the ship", "more time to aim and shoot", warn(x[A1i]), warn(y[A1i])],
-    ["Drone tracks lost during the swarm", "every lost track has to be found again", String(lostTotal("spy1")), String(lostTotal("spy6"))],
-    ["Interceptors wasted", "a missile in flight with no track to guide it is lost", String(wastedTotal("spy1")), String(wastedTotal("spy6"))],
+    ["Warning before the missile aimed at the ship would hit", "time from first detection to impact: time to aim and shoot", warn(x[A1i]), warn(y[A1i])],
+    ["Most drones left untracked at once", "the radar was full, so these flew in unwatched and couldn't be shot at", String(RUNS.spy1.peakWait), String(RUNS.spy6.peakWait)],
+    [`All ${SWARM_N} swarm drones destroyed by`, "how long the swarm stays a threat to the ship", `T+${mmss(swarmClear("spy1"))}`, `T+${mmss(swarmClear("spy6"))}`],
+    ...(lostTotal("spy1") + lostTotal("spy6") + wastedTotal("spy1") + wastedTotal("spy6") ? [["Tracks lost / interceptors wasted", "an engaged missile with no track to guide it is lost", `${lostTotal("spy1")} / ${wastedTotal("spy1")}`, `${lostTotal("spy6")} / ${wastedTotal("spy6")}`]] : []),
     ["Drones under jamming first seen at", "noise from the enemy aircraft blinds the old radar", jamIdx.length ? `${jamNm("spy1").toFixed(0)} nm` : "n/a", jamIdx.length ? `${jamNm("spy6").toFixed(0)} nm` : "n/a"],
     ["Real warhead picked out of the decoys after", "the space missile can only be shot once it's identified", `${DISCRIM.spy1} s`, `${DISCRIM.spy6} s`],
   ];
@@ -1458,6 +1482,7 @@ function endOfRun() {
   $("endSub").textContent = k1 === NR && k6 === NR ? `Both radars stop all ${NR} threats in this model. The difference is how much time and margin the crew has.`
     : `In this model SPY-1D stops ${k1} of ${NR} threats and SPY-6 stops ${k6}.`;
   $("endOther").textContent = mode === "spy6" ? "Run it with SPY-1D" : "Run it with SPY-6";
+  coQueue = []; coLeft = 0; $("callout").classList.remove("on");
   $("endcard").hidden = false;
 }
 $("endOther").addEventListener("click", () => { $("endcard").hidden = true; setMode(mode === "spy6" ? "spy1" : "spy6"); setAuto(true); });
@@ -1473,11 +1498,11 @@ $("capBtn").addEventListener("click", () => { const off = $("view").classList.to
 $("dlcsv").addEventListener("click", () => {
   const q = v => v == null ? "" : (typeof v === "number" ? +v.toFixed(2) : `"${String(v).replace(/"/g, '""')}"`);
   const out = [["# SPY-6 vs SPY-1D kill-chain simulation results. Times in seconds of scenario time; ranges in nautical miles; altitudes in km. Model outputs, not real performance."],
-    ["radar", "track", "name", "class", "rcs_m2", "launch_s", "first_detect_s", "detect_range_nm", "identified_s", "weapon", "weapon_launch_s", "intercept_s", "intercept_range_nm", "intercept_alt_km", "warning_time_s", "tracks_lost", "interceptors_wasted", "outcome"]];
+    ["radar", "track", "name", "class", "rcs_m2", "launch_s", "first_detect_s", "detect_range_nm", "identified_s", "weapon", "weapon_launch_s", "intercept_s", "intercept_range_nm", "intercept_alt_km", "detect_to_kill_s", "warning_before_impact_s", "tracks_lost", "interceptors_wasted", "outcome"]];
   ["spy1", "spy6"].forEach(m => RUNS[m].threats.forEach(t => out.push([m === "spy6" ? "SPY-6(V)1" : "SPY-1D", t.d.tn, t.d.name, t.d.cls, t.d.rcs, t.d.path.t0, t.tDet, t.dDet == null ? null : t.dDet / NM, t.tId, t.d.weapon, t.tLaunch, t.tInt,
-    t.intPoint ? Math.hypot(t.intPoint.x, t.intPoint.z) / NM : null, t.intPoint ? t.intPoint.y : null, t.tDet != null && t.tInt != null ? t.tInt - t.tDet : null, t.lost, t.wasted, t.outcome].map(q))));
-  out.push([]); out.push(["radar", "mean_track_update_s", "worst_track_update_s", "tracks_lost_total", "interceptors_wasted_total"]);
-  ["spy1", "spy6"].forEach(m => out.push([m === "spy6" ? "SPY-6(V)1" : "SPY-1D", q(avgArr(RUNS[m].updates)), q(maxArr(RUNS[m].updates)), lostTotal(m), wastedTotal(m)]));
+    t.intPoint ? Math.hypot(t.intPoint.x, t.intPoint.z) / NM : null, t.intPoint ? t.intPoint.y : null, t.tDet != null && t.tInt != null ? t.tInt - t.tDet : null, t.tDet != null && t.d.id !== "B1" ? warnT(t) : null, t.lost, t.wasted, t.outcome].map(q))));
+  out.push([]); out.push(["radar", "mean_track_update_s", "worst_track_update_s", "tracks_lost_total", "interceptors_wasted_total", "peak_untracked_radar_full", "swarm_cleared_s"]);
+  ["spy1", "spy6"].forEach(m => out.push([m === "spy6" ? "SPY-6(V)1" : "SPY-1D", q(avgArr(RUNS[m].updates)), q(maxArr(RUNS[m].updates)), lostTotal(m), wastedTotal(m), RUNS[m].peakWait, q(swarmClear(m))]));
   out.push([]); out.push(["radar", "time_s", "event"]);
   ["spy1", "spy6"].forEach(m => RUNS[m].events.forEach(e => out.push([m === "spy6" ? "SPY-6(V)1" : "SPY-1D", q(e.t), q(e.msg)])));
   const blob = new Blob([out.map(r => r.join(",")).join("\n")], { type: "text/csv" }), a = document.createElement("a");
@@ -1554,11 +1579,11 @@ function manual() { if (auto) { auto = false; $("camAuto").setAttribute("aria-pr
 const SHOTNAME = { gun: "Watching: close-in guns", ship: "Watching: your ship", swarm: "Watching: the drone swarm", jam: "Watching: the jamming aircraft", a1: "Watching: the missile aimed at your ship", space: "Watching: the missile in space", decoys: "Watching: decoys in space" };
 const DRIFT = { ship: 0.035, swarm: 0.02, jam: 0.012, space: 0.01 };
 let focus = null, focusUntil = 0, dirSeen = 0, dirDecoy = false;
-const FOCUS_OF = { range: "a1", jam: "jam", swarm: "swarm", lost: "swarm", discrim: "decoys" };
+const FOCUS_OF = { range: "a1", jam: "jam", swarm: "swarm", lost: "swarm", full: "swarm", discrim: "decoys" };
 const CHAPTERS = [
   { t: 0, title: "Ballistic missiles", sub: "Two missiles launch from the coast. One is aimed at your ship; the other arcs up through space." },
   { t: ACT2 + 185, title: "Jamming and sea-skimmers", sub: "An enemy aircraft floods the radar with noise while drones and cruise missiles fly in low over the water." },
-  { t: ACT2 + 335, title: "Drone swarm", sub: "Eight drones arrive together from one direction. Can the radar keep watching all of them at once?" },
+  { t: ACT2 + 335, title: "Drone swarm", sub: `${SWARM_N} drones arrive together from one direction, more than Carney faced. Can the radar keep watching all of them at once?` },
 ];
 let chapShown = -1, chapUntil = 0;
 function runChapters(now) {
@@ -1788,7 +1813,7 @@ function render(realDt, now = performance.now()) {
       const c = V(0, 0, 0); sw.forEach(t => c.add(t.pos)); c.multiplyScalar(1 / sw.length); c.y += 0.4;
       const held = sw.filter(t => t.stage >= 1).length;
       place(swarmEl, c, 0); swarmEl.className = "trk swarm " + (held === sw.length ? "all" : "some");
-      setLbl(swarmEl, `Drone swarm <i>${held} of ${sw.length} tracked</i>${held < sw.length ? `<br><b>${sw.length - held} not being tracked</b>` : ""}`);
+      setLbl(swarmEl, `Drone swarm <i>${held} of ${sw.length} tracked</i>${held < sw.length ? `<br><b>${sw.length - held} untracked${st.waitNow ? ": radar full" : ""}</b>` : ""}`);
     } else swarmEl.hidden = true;
   }
   // own ship marker when the camera is far away

@@ -73,3 +73,46 @@ These are modelling or wording choices, so they are yours to decide.
    model gives 1.51–1.70° across 3.1–3.5 GHz, so 1.7° is matched at the bottom of the band only.
 3. **The appendix says the code is "reproduced in full and unedited".** If you regenerate Fig 5 for
    the paper, update the appendix to match this version.
+
+## Re-audit (1 Nov 2026)
+
+A second pass over the audited code, checked against published sources.
+
+### Fixed
+
+1. **SPY-1D track capacity was far below published figures.** The scheduler (Fig 2 and the
+   simulation) let SPY-1D hold about 8 tracks per face, about 32 for the ship. Published sources put
+   SPY-1 at "more than 100 targets" ([Missile Defense Advocacy Alliance](https://missiledefenseadvocacy.org/defense-systems/anspy-1-radar);
+   [Aegis Combat System, citing the Warfighter Encyclopedia](https://en.wikipedia.org/wiki/Aegis_Combat_System)).
+   Each SPY-1D track slot now updates 3 tracks, so a face holds about 24 tracks (about 96 for the ship)
+   inside the 4 s limit. SPY-6 stays at 30× that ("over 30 times as many targets", CSIS): about 720 per face.
+   Fig 2 and its test were updated. Carney's 19-threat raid now sits inside SPY-1D's capacity, which fits
+   Carney's real success.
+2. **Swarm resized so the capacity difference still shows honestly.** It is now 30 drones from one direction,
+   sized past SPY-1D's per-face limit and heavier than Carney's raid. The chapter text says so.
+3. **SPY-1D track management prioritizes instead of starving every track.** With a full face, plain
+   round-robin skipped tracks whenever the list changed and collapsed into thousands of lost tracks. SPY-1D
+   now updates the least-recently-updated tracks first, keeps engaged threats first, and leaves the
+   overflow untracked until a slot frees ("RADAR FULL" in the log). The engaged-track-loss rule is kept;
+   with prioritization it no longer triggers in either run.
+4. **"Warning time" now means detection to impact.** It was detection to kill. The end card, captions,
+   summary and CSV (`warning_before_impact_s`, plus `detect_to_kill_s`) use the new definition.
+5. **v3 Fig 1:** the 9-RMA point is now marked as a reported estimate (hollow marker); no primary source
+   gives its sensitivity. **Fig A title** now says the model gives 1.5–1.7°, consistent with 1.7°.
+6. The event caption no longer shows through the end card.
+
+### Results after the re-audit
+
+| | SPY-1D | SPY-6 |
+| --- | --- | --- |
+| Threats stopped | 39 / 39 | 39 / 39 |
+| Anti-ship ballistic missile first detected | 102 nm | 215 nm |
+| Warning before it would hit | 2:41 | 7:02 |
+| Most threats untracked at once (radar full) | 8 | 0 |
+| 30-drone swarm destroyed by | T+11:45 | T+10:55 |
+| Tracks lost / interceptors wasted | 0 / 0 | 0 / 0 |
+| Worst track-update gap | 4.0 s | 0.3 s |
+| Jammed drones first seen at | 18 nm | 33 nm |
+
+This supersedes the "153 tracks lost / 23 interceptors wasted" figures above: those came from the
+under-capacity scheduler.

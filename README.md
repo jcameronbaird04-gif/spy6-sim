@@ -22,6 +22,7 @@ simulation of the same raid against both radars.
 | `analysis/spy6_common.py` | Shared constants, plot style and array physics |
 | `analysis/archive/` | Earlier drafts (v1, v2), kept for the record |
 | `tests/` | Checks against textbook results and the numbers quoted in the paper |
+| `scenario.yaml` | The simulated raid and the numbers behind it |
 | `figures/` | Generated PNGs, one folder per script (not committed) |
 
 ## Running

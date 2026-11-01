@@ -23,16 +23,19 @@ from spy6_common import (BLUE, C, DARK, GREY, RED, SEED, SPY6_GAIN, TARGETS, def
                          detection_range as R, digital_beams, array_factor, one_pulse_scene,
                          save, steering, use_style)
 
-# Fig 2 scheduler (illustrative). SPY-1D: one beam per face, 0.1 s dwells, 20% of dwells on tracks.
+# Fig 2 scheduler (illustrative timing, calibrated to published capacity).
+# SPY-1D: one beam per face, 0.1 s scheduling slots, 20% of slots on tracks, 3 track updates per slot,
+#   so about 24 tracks per face (~100 for the ship) before updates exceed LOST_S. That matches the
+#   published "more than 100 targets" for SPY-1 (Missile Defense Advocacy Alliance; Aegis references).
 # SPY-6: digital beams, every track every 0.25 s up to 30x SPY-1D's capacity
-# (published "over 30 times as many targets").
-DWELL, TRACK_SHARE, LOST_S, SPY6_UPDATE, CAPACITY_X = 0.1, 0.2, 4.0, 0.25, 30
-CAP1 = LOST_S * TRACK_SHARE / DWELL            # tracks per face before SPY-1D updates exceed LOST_S
+#   (published "over 30 times as many targets", CSIS).
+DWELL, TRACK_SHARE, TRACKS_PER_DWELL, LOST_S, SPY6_UPDATE, CAPACITY_X = 0.1, 0.2, 3, 4.0, 0.25, 30
+CAP1 = LOST_S * TRACK_SHARE * TRACKS_PER_DWELL / DWELL    # tracks per face before SPY-1D updates exceed LOST_S
 CAP6 = CAPACITY_X * CAP1
 
 
 def update_interval_spy1(n):
-    return n * DWELL / TRACK_SHARE
+    return n * DWELL / (TRACK_SHARE * TRACKS_PER_DWELL)
 
 
 def update_interval_spy6(n):
@@ -88,18 +91,18 @@ def fig1_range(out):
 
 # ---------------------------------------------------------------- Fig 2 capacity
 def fig2_capacity(out):
-    N = np.logspace(0, np.log10(400), 400)
+    N = np.logspace(0, np.log10(2000), 400)
     fig, ax = plt.subplots(figsize=(7.2, 4.2))
     ax.loglog(N, update_interval_spy1(N), color=GREY, lw=2.5, label="SPY-1D: one beam per face, shared")
     ax.loglog(N, update_interval_spy6(N), color=BLUE, lw=2.5, label=f"SPY-6: digital beams, every track every {SPY6_UPDATE} s")
     ax.axhline(LOST_S, color=RED, ls="--", lw=1); ax.text(1.1, LOST_S * 1.12, f"Track updates this slow risk losing a fast missile (illustrative {LOST_S:.0f} s)", color=RED, fontsize=8.5)
     ax.axvline(19, color=DARK, ls=":", lw=1); ax.text(19 * 1.08, 20, "USS Carney,\nOct 19, 2023:\n19 threats", fontsize=8.5, color=DARK)
-    ax.plot(CAP1, LOST_S, "o", color=GREY, ms=7); ax.annotate(f"SPY-1D saturates\n~{CAP1:.0f} tracks per face", (CAP1, LOST_S), xytext=(-110, 22), textcoords="offset points", fontsize=8.5,
+    ax.plot(CAP1, LOST_S, "o", color=GREY, ms=7); ax.annotate(f"SPY-1D saturates\n~{CAP1:.0f} tracks per face\n(~{4 * CAP1:.0f} for the ship)", (CAP1, LOST_S), xytext=(-130, 26), textcoords="offset points", fontsize=8.5,
                                                              arrowprops=dict(arrowstyle="-", lw=.6))
     ax.plot(CAP6, SPY6_UPDATE, "o", color=BLUE, ms=7); ax.annotate(f"~{CAPACITY_X}× more: ~{CAP6:.0f}", (CAP6, SPY6_UPDATE), xytext=(-60, 26), textcoords="offset points", fontsize=8.5, color=BLUE, arrowprops=dict(arrowstyle="-", lw=.6, color=BLUE))
-    ax.set(xlabel="Targets on one array face", ylabel="Time between updates of each track (s)", ylim=(0.08, 60),
+    ax.set(xlabel="Targets on one array face", ylabel="Time between updates of each track (s)", ylim=(0.08, 100),
            title="2. Capacity: SPY-1D slows as the raid grows; SPY-6 doesn't")
-    ax.legend(loc="center right", frameon=False, fontsize=8.5); ax.grid(alpha=.25, which="both"); save(fig, out, "fig2_capacity")
+    ax.legend(loc="center right", bbox_to_anchor=(1.0, 0.38), frameon=False, fontsize=8.5); ax.grid(alpha=.25, which="both"); save(fig, out, "fig2_capacity")
 
 
 # ---------------------------------------------------------------- Fig 3 digital beamforming (one pulse)

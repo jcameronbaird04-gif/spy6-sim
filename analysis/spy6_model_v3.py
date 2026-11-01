@@ -7,7 +7,7 @@ module. More modules -> sensitivity grows ~N^3 -> +15 dB -> twice the range on
 a half-size target. And because every module's signal is digitized, one face
 can form many beams at once instead of one.
 
-Fig 1  Sensitivity vs number of modules: N^3 theory vs published SPY-6 data
+Fig 1  Sensitivity vs number of modules: N^3 theory vs published (37 RMA) and reported-estimate (9, 69 RMA) SPY-6 data
 Fig 2  What +15 dB buys: detection range vs target size, SPY-1D vs SPY-6(V)1
 Fig 3  Digital beamforming: all targets from one pulse vs one analog beam
 Fig A  Validation: model reproduces SPY-1's published 1.7 deg beam width
@@ -51,7 +51,7 @@ def spy1_beamwidths(weights, freqs=np.linspace(3.1e9, 3.5e9, 9), N1=72, aperture
 def fig1_sensitivity(out, res):
     N = np.logspace(np.log10(800), np.log10(13000), 200)
     theory = sensitivity_db(N / MOD)
-    pub = [("SPY-6(V)2\n9 RMAs", 9 * MOD, 0.0, "published"),
+    pub = [("SPY-6(V)2\n9 RMAs\n(reported estimate)", 9 * MOD, 0.0, "estimate"),     # "estimated to have the same sensitivity as SPY-1D" (secondary sources)
            ("SPY-6(V)1\n37 RMAs\n(Flight III)", 37 * MOD, 15.0, "published"),
            ("69-RMA face\n(proposed)", 69 * MOD, 25.0, "estimate")]
     v4 = sensitivity_db(24)
@@ -143,7 +143,7 @@ def figA_validation(out, res):
         ax.plot(fr / 1e9, v, "o-", color=col, label=lab); res[lab] = (round(float(min(v)), 2), round(float(max(v)), 2))
     ax.axhline(1.7, color=DARK, ls="--", lw=1); ax.text(3.28, 1.72, "Published SPY-1 beam width: 1.7°", fontsize=9)
     ax.set(xlabel="Frequency (GHz), SPY-1's published band", ylabel="Beam width (deg)", ylim=(1.0, 1.9),
-           title="Model check: our code reproduces SPY-1's real 1.7° beam")
+           title="Model check: our code gives a 1.5–1.7° beam (tapered),\nconsistent with SPY-1's published 1.7°")
     ax.legend(loc="lower left", fontsize=8.5, frameon=False); ax.grid(alpha=.25)
     save(fig, out, "figA_spy1_validation")
 

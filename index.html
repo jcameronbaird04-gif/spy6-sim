@@ -7,8 +7,6 @@
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;500;700&family=Roboto+Mono:wght@400;500&display=swap">
-</head>
-<body>
 <style>
 /* Full-screen simulation. The interface is a thin HUD drawn straight onto the picture:
    plain text with a shadow, no boxes, no chrome. Data lives in a drawer you can close. */
@@ -194,6 +192,8 @@ dt { color: var(--ink); } dd { margin: 0; color: var(--ink-2); }
 }
 @media (prefers-reduced-motion: reduce) { .trk.fresh .box { animation: none; } .callout, .drawer { transition: none; } }
 </style>
+</head>
+<body>
 
 <main class="view" id="view">
   <canvas id="scene" aria-label="3D view of a Flight III destroyer engaging a mixed missile and drone raid"></canvas>
@@ -290,8 +290,8 @@ dt { color: var(--ink); } dd { margin: 0; color: var(--ink-2); }
 const RE = 6371, KE = 4 / 3, RADAR_H = 0.025;     // array ~25 m above the waterline
 const R0 = 400;                                     // illustrative SPY-1D range on a 1 m^2 target (km)
 const GAIN = { spy1: 1, spy6: Math.pow(10, 1.5) };  // +15 dB
-const PLAYBACK = 8; const ACT2 = 220;   // low fliers launch after the ballistic act is under way
-                                // 1x = 8x real time
+const PLAYBACK = 8;                     // 1x = 8x real time
+const ACT2 = 220;                       // low fliers launch after the ballistic act is under way
 const NM = 1.852, KT = 1943.84;
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const ORIGIN = V(0, 0, 0);
@@ -329,7 +329,7 @@ const THREATS = [
   { id: "C1", tn: 1004, name: "Cruise missile 1", cls: "ASCM", kind: "cruise", rcs: 0.1, len: 6, weapon: "SM-2", path: straight(V(92, 0, -10), 0.02, 0.25, ACT2 + 10, 0) },
   { id: "C2", tn: 1005, name: "Cruise missile 2", cls: "ASCM", kind: "cruise", rcs: 0.1, len: 6, weapon: "SM-2", path: straight(V(96, 0, 8), 0.02, 0.25, ACT2 + 55, 0) },
   { id: "A1", tn: 1006, name: "Anti-ship ballistic missile", cls: "ASBM", kind: "bm", rcs: 0.05, len: 12, weapon: "SM-6", path: ballistic(V(390, 0, -110), V(0, 0, 0), 120, 20, 430) },
-  { id: "B1", tn: 1007, name: "Ballistic missile (space)", cls: "MRBM", kind: "bm", rcs: 0.2, len: 14, weapon: "SM-3", path: ballistic(V(250, 0, 350), V(-250, 0, -1450), 250, 40, 720) },
+  { id: "B1", tn: 1007, name: "Ballistic missile (space)", cls: "MRBM", kind: "bm", rcs: 0.2, len: 14, weapon: "SM-3", decoys: 3, path: ballistic(V(250, 0, 350), V(-250, 0, -1450), 250, 40, 720) },
   { id: "D4", tn: 1008, name: "Drone 4", cls: "UAV", kind: "drone", rcs: 0.1, len: 3.5, weapon: "5-inch", path: straight(V(12, 0, -24), 0.03, 0.0514, ACT2 + 300, 0.3) },
   { id: "D5", tn: 1009, name: "Drone 5 (pop-up)", cls: "UAV", kind: "drone", rcs: 0.05, len: 2.5, weapon: "CIWS", path: straight(V(4.5, 0, 4.5), 0.015, 0.06, ACT2 + 420, 0.15) },
   // drone swarm: eight Shahed-type drones from one direction, so they all load the same array face (capacity showcase)
@@ -339,10 +339,9 @@ const THREATS = [
       path: straight(V(Math.sin(a) * r, 0, -Math.cos(a) * r), 0.05, 0.0514, ACT2 + 340 + k * 1.5, 0.4) };
   }),
 ];
-THREATS.find(d => d.id === "B1").decoys = 3;
 // stand-off jammer aircraft (jamming showcase): orbits east of the ship, noise-jamming one sector
 const JAM = { t0: ACT2 + 190, pos: V(177.3, 8, 31.3), half: 12, loss: { spy1: 0.15, spy6: 0.95 } };   // bearing 100, covers the eastern drones, not the ASBM (074)
-JAM.brg = (Math.atan2(JAM.pos.x, -JAM.pos.z) * 180 / Math.PI + 360) % 360;
+JAM.brg = bearing(JAM.pos);
 const angDiff = (a, b) => Math.abs(((a - b + 540) % 360) - 180);
 const DECOY_REL = 0.17;                          // fraction of B1's flight when decoys separate
 const DISCRIM = { spy6: 6, spy1: 40 };           // seconds after release to pick out the warhead (illustrative)
@@ -352,10 +351,10 @@ const STAGES = ["Detect", "Track", "ID", "Engage", "Midcourse", "Terminal", "Ass
 
 // =============================================================== combat system model
 function newState(mode) {
-  return { mode, t: 0, events: [], dwells: [], faces: [0, 1, 2, 3].map(i => ({ i, clock: i * 0.03, slot: 0, rr: 0, searchProg: 0, lastWasSearch: false })),
+  return { mode, t: 0, events: [], faces: [0, 1, 2, 3].map(i => ({ i, clock: i * 0.03, slot: 0, rr: 0, searchProg: 0 })),
     nextSearch6: [0.1, 0.35, 0.6, 0.85], updates: [], callouts: [], flags: {},
     threats: THREATS.map(d => ({ d, stage: 0, looks: 0, alive: true, outcome: null, pos: V(0, -99, 0), seen: null, seenAt: 0,
-      tDet: null, tAcq: null, dDet: null, tId: null, lost: 0, lostAt: null, tLaunch: null, tInt: null, intPoint: null, nextUpd: 0, lastUpd: null, ints: null })) };
+      tDet: null, tAcq: null, dDet: null, tId: null, lost: 0, wasted: 0, lostAt: null, tLaunch: null, tInt: null, intPoint: null, nextUpd: 0, lastUpd: null, ints: null })) };
 }
 const tmp = V(0, 0, 0), tmp2 = V(0, 0, 0);
 const say = (st, msg) => st.events.push({ t: st.t, msg });
@@ -371,10 +370,9 @@ function detect(st, th) {
   th.tDet = st.t; th.dDet = th.pos.length(); th.looks = 1; th.lastUpd = st.t; th.seen = th.pos.clone(); th.seenAt = st.t; th.nextUpd = st.t + 0.25;
   say(st, `DETECT track ${th.d.tn}, ${(th.dDet / NM).toFixed(0)} nm, bearing ${bearing(th.pos).toFixed(0).padStart(3, "0")}`);
 }
-function look(st, th, face) {
+function look(st, th) {
   th.looks++; if (th.lastUpd != null) st.updates.push(st.t - th.lastUpd);
   th.lastUpd = st.t; th.seen = th.pos.clone(); th.seenAt = st.t;
-  st.dwells.push({ face, p: th.pos.clone(), track: true });
 }
 const LAUNCH = V(0, 0.008, -0.04);
 function plan(st, th) {
@@ -407,8 +405,8 @@ function step(st, dt) {
   { const a1 = st.threats.find(t => t.d.id === "A1"); if (a1.tDet != null && !st.flags.range) { st.flags.range = true; st.callouts.push({ t: st.t, key: "range" }); } }
   if (!st.flags.swarm && st.threats.filter(t => t.d.swarm && t.stage >= 1).length >= 5) { st.flags.swarm = true; st.callouts.push({ t: st.t, key: "swarm" }); }
   if (mode === "spy6") {
-    // digital beamforming: every track gets its own look every 0.5 s; each face completes a search frame every 1 s
-    for (const th of st.threats) if (live(th) && st.t >= th.nextUpd) { look(st, th, faceOf(th.pos)); th.nextUpd += 0.25; }
+    // digital beamforming: every track gets its own look every 0.25 s; each face completes a search frame every 1 s
+    for (const th of st.threats) if (live(th) && st.t >= th.nextUpd) { look(st, th); th.nextUpd += 0.25; }
     for (let f = 0; f < 4; f++) if (st.t >= st.nextSearch6[f]) {
       st.nextSearch6[f] += 1.0;
       for (const th of st.threats) if (th.alive && th.stage === 0 && st.t >= th.d.path.t0 && faceOf(th.pos) === f && covered(th, mode, st)) detect(st, th);
@@ -422,7 +420,7 @@ function step(st, dt) {
         const mine = st.threats.filter(th => live(th) && faceOf(th.pos) === face.i);
         const slot = face.slot++ % 10;
         if (slot < 2 && mine.length) {
-          const th = mine[face.rr++ % mine.length]; look(st, th, face.i);
+          look(st, mine[face.rr++ % mine.length]);
         } else {
           if (++face.searchProg >= 10) {
             face.searchProg = 0;
@@ -440,12 +438,21 @@ function step(st, dt) {
       if (st.t >= tDis && !st.flags.discrim) { st.flags.discrim = true; say(st, `DISCRIMINATE ${th.d.tn}: warhead picked out of 4 objects`); st.callouts.push({ t: st.t, key: "discrim" }); }
     }
     if (th.stage === 2 && th.looks >= 6 && st.t >= th.tAcq + 4 && (!th.d.decoys || st.flags.discrim)) { th.stage = 3; th.tId = st.t; say(st, `ID ${th.d.tn} HOSTILE ${th.d.cls}`); }
-    if (th.alive && th.stage >= 1 && th.stage <= 3 && st.t - th.lastUpd > LOST_GAP) {
+    const w = WEAPON[th.d.weapon];
+    // Until its own seeker takes over (terminal), a missile needs the ship's track for midcourse uplink, so engaged
+    // tracks can be lost too. Guns are left out: they fire within seconds of engaging.
+    const needsTrack = th.stage >= 1 && (th.stage <= 3 || (th.stage <= 5 && !w.gun));
+    if (th.alive && needsTrack && st.t - th.lastUpd > LOST_GAP) {
+      if (th.stage >= 4) {
+        const flying = st.t >= th.tLaunch;
+        if (flying) th.wasted++;
+        say(st, flying ? `ABORT ${th.d.weapon} at ${th.d.tn}: no track to guide it, interceptor lost` : `HOLD FIRE ${th.d.tn}: track lost before launch`);
+        Object.assign(th, { tLaunch: null, tInt: null, intPoint: null, saidAway: false });
+      }
       th.stage = 0; th.looks = 0; th.lost++; th.lostAt = st.t;
       say(st, `TRACK LOST ${th.d.tn}: no update for ${(st.t - th.lastUpd).toFixed(1)} s`);
       if (!st.flags.lost) { st.flags.lost = true; st.callouts.push({ t: st.t, key: "lost" }); }
     }
-    const w = WEAPON[th.d.weapon];
     if (th.stage === 3 && st.t >= th.tId + 2 && th.alive) {
       if (w.gun) {
         const r0 = th.pos.distanceTo(w.mount);
@@ -1123,18 +1130,21 @@ const DECOY_DIR = [V(1, 0.35, 0.2), V(-0.8, 0.5, 0.45), V(0.15, -0.3, -1)].map(v
 const decoys = DECOY_DIR.map(() => { const m = buildBallistic(B1d.len); m.body.visible = false; m.rv.visible = true; m.g.visible = false; scene.add(m.g); return { m, el: null }; });
 linearize(scene);
 const decoyPos = (k, t, out) => B1d.path.pos(t - 1.5 * (k + 1), out).addScaledVector(DECOY_DIR[k], Math.min(9, 0.15 * (t - B1rel)));
+const A1i = THREATS.findIndex(d => d.id === "A1");
 const avgArr = arr => arr.reduce((s, v) => s + v, 0) / Math.max(arr.length, 1);
+const maxArr = arr => arr.reduce((m, v) => Math.max(m, v), arr.length ? -Infinity : 0);   // no spread: safe on long arrays
+const lostTotal = m => RUNS[m].threats.reduce((s, t) => s + t.lost, 0);
+const wastedTotal = m => RUNS[m].threats.reduce((s, t) => s + t.wasted, 0);
+const killCount = m => RUNS[m].threats.filter(t => t.outcome === "Destroyed").length;
 function calloutText(key, m) {
-  const a1 = RUNS.spy1.threats[THREATS.findIndex(d => d.id === "A1")], a6 = RUNS.spy6.threats[THREATS.findIndex(d => d.id === "A1")];
-  const b1 = RUNS.spy1.threats[B1i], b6 = RUNS.spy6.threats[B1i], nm = th => (th.dDet / NM).toFixed(0), lost1 = RUNS.spy1.threats.reduce((s, t) => s + t.lost, 0);
-  const A1i = THREATS.findIndex(d => d.id === "A1"), brg = JAM.brg.toFixed(0).padStart(3, "0");
-  const n6 = (RUNS.spy6.threats[A1i].dDet / NM).toFixed(0), n1 = (RUNS.spy1.threats[A1i].dDet / NM).toFixed(0), lost6 = RUNS.spy6.threats.reduce((s, t) => s + t.lost, 0);
+  const lost1 = lostTotal("spy1"), lost6 = lostTotal("spy6");
+  const n6 = (RUNS.spy6.threats[A1i].dDet / NM).toFixed(0), n1 = (RUNS.spy1.threats[A1i].dDet / NM).toFixed(0);
   const w6 = mmss(RUNS.spy6.threats[A1i].tInt - RUNS.spy6.threats[A1i].tDet), w1 = mmss(RUNS.spy1.threats[A1i].tInt - RUNS.spy1.threats[A1i].tDet);
   const T = {
     range: ["Range", m === "spy6" ? `SPY-6 spots the missile aimed at the ship <b>${n6} nautical miles</b> out, almost as soon as it launches. The crew gets <b>${w6}</b> to shoot it down. The older radar would not see it until ${n1} nm.`
                                  : `SPY-1D finally spots the missile aimed at the ship, only <b>${n1} nautical miles</b> out. The crew gets <b>${w1}</b> to shoot it down, instead of ${w6} with SPY-6.`, m === "spy1"],
     swarm: ["Capacity", m === "spy6" ? `Eight drones at once. SPY-6 points a separate beam at every drone at the same time, so it never loses sight of any of them.`
-                                     : `Eight drones at once. SPY-1D has one beam per side of the ship and has to take turns, so it keeps losing drones and searching for them again.`, m === "spy1"],
+                                     : `Eight drones at once. SPY-1D has one beam per side of the ship and has to take turns, so it keeps losing drones, and the interceptors it already fired at them, and has to search again.`, m === "spy1"],
     jam: ["Jamming", m === "spy6" ? `An enemy aircraft is blasting radio noise at the ship. SPY-6 can tune out noise from one direction, so it still sees almost as far as before.`
                                   : `An enemy aircraft is blasting radio noise at the ship. SPY-1D can't tune it out, so in that direction it can only see <b>${Math.round(JAM.loss.spy1 * 100)}%</b> as far.`, m === "spy1"],
     lost: ["Capacity", `SPY-1D just lost track of a drone and has to find it again. It loses <b>${lost1}</b> tracks during this attack; SPY-6 loses ${lost6}.`, true],
@@ -1339,7 +1349,7 @@ function interceptorPos(th, t, out) {
 
 // =============================================================== UI wiring
 const $ = id => document.getElementById(id);
-let mode = "spy6", st = newState(mode), playing = false, speed = 1, acc = 0, dwellCursor = 0;
+let mode = "spy6", st = newState(mode), playing = false, speed = 1, acc = 0;
 const rows = THREATS.map(d => {
   const r = document.createElement("div"); r.className = "row"; r.tabIndex = 0; r.setAttribute("role", "button"); r.title = "Follow this threat with the camera";
   r.innerHTML = `<div class="top"><span class="name">${d.name}</span><span class="st">Not detected</span></div><div class="pips">${STAGES.map(() => '<div class="pip"></div>').join("")}</div>`;
@@ -1354,22 +1364,22 @@ function fillCompare() {
   THREATS.forEach((d, i) => {
     const a = RUNS.spy1.threats[i], b = RUNS.spy6.threats[i];
     const det = th => th.dDet == null ? "never" : (th.dDet / NM).toFixed(0);
-    const kill = th => th.outcome === "Destroyed" ? mmss(th.d.path.t0 + th.d.path.T - th.tInt) : (th.outcome || "—");
     const tr = document.createElement("tr");
     tr.innerHTML = `<td>${d.name}</td><td>${det(a)} nm</td><td class="b">${det(b)} nm</td>`;
     tb.appendChild(tr);
   });
-  const avg = arr => arr.reduce((s, v) => s + v, 0) / Math.max(arr.length, 1);
-  const busy = RUNS.spy1.updates.length ? Math.max(...RUNS.spy1.updates) : 0;
-  const a1 = RUNS.spy1.threats[5], a6 = RUNS.spy6.threats[5];
-  const spare = th => mmss(th.d.path.t0 + th.d.path.T - th.tInt);
-  const b1r = RUNS.spy1.threats[B1i], b6r = RUNS.spy6.threats[B1i], lostN = m => RUNS[m].threats.reduce((s, t) => s + t.lost, 0);
+  const busy = maxArr(RUNS.spy1.updates);
+  const a1 = RUNS.spy1.threats[A1i], a6 = RUNS.spy6.threats[A1i];
+  const b1r = RUNS.spy1.threats[B1i], b6r = RUNS.spy6.threats[B1i];
+  const warnS = th => th.tInt != null && th.tDet != null ? `${(th.tInt - th.tDet).toFixed(0)} s` : "no";
+  const dies = th => th.tInt != null ? `T+${mmss(th.tInt)}` : `never (${(th.outcome || "not engaged").toLowerCase()})`;
+  const skimNm = (horizonKm(0.02) / NM).toFixed(0);   // sea-skimmer cruise altitude: 20 m
   const jammed = THREATS.filter((d, i) => { const x = RUNS.spy1.threats[i], y = RUNS.spy6.threats[i]; return x.dDet != null && y.dDet != null && y.dDet - x.dDet > 5 && d.kind !== "bm"; }).length;
-  $("summary").innerHTML = `<b>Range.</b> SPY-6 picks up the anti-ship ballistic missile at <b>${(a6.dDet / NM).toFixed(0)} nm</b> vs ${(a1.dDet / NM).toFixed(0)} nm, giving <b>${(a6.tInt - a6.tDet).toFixed(0)} s</b> of warning instead of ${(a1.tInt - a1.tDet).toFixed(0)} s. `
-    + `<b>Capacity.</b> Track updates every <b>${avg(RUNS.spy6.updates).toFixed(2)} s</b> vs ${avg(RUNS.spy1.updates).toFixed(1)} s (worst ${busy.toFixed(1)} s); tracks lost: <b>${lostN("spy6")}</b> vs ${lostN("spy1")}. `
+  $("summary").innerHTML = `<b>Range.</b> SPY-6 picks up the anti-ship ballistic missile at <b>${(a6.dDet / NM).toFixed(0)} nm</b> vs ${(a1.dDet / NM).toFixed(0)} nm, giving <b>${warnS(a6)}</b> of warning instead of ${warnS(a1)}. `
+    + `<b>Capacity.</b> Track updates every <b>${avgArr(RUNS.spy6.updates).toFixed(2)} s</b> vs ${avgArr(RUNS.spy1.updates).toFixed(1)} s (worst ${busy.toFixed(1)} s); tracks lost: <b>${lostTotal("spy6")}</b> vs ${lostTotal("spy1")}; interceptors wasted when their track was lost in flight: <b>${wastedTotal("spy6")}</b> vs ${wastedTotal("spy1")}. `
     + `<b>Jamming.</b> ${jammed} low-flying threats in the jammed sector are seen later by SPY-1D; SPY-6 is unaffected. `
-    + `<b>Discrimination.</b> The missile in space dies at T+${mmss(b6r.tInt)} vs T+${mmss(b1r.tInt)}. `
-    + `Sea-skimmers outside the jammed sector stay below the radar horizon until about 21 nm, so both radars see those at the same range: that limit is geometry, not radar power.`;
+    + `<b>Discrimination.</b> The missile in space is destroyed at ${dies(b6r)} with SPY-6 vs ${dies(b1r)} with SPY-1D. `
+    + `Sea-skimmers outside the jammed sector stay below the radar horizon until about ${skimNm} nm, so both radars see those at the same range: that limit is geometry, not radar power.`;
 }
 fillCompare();
 const lanes = document.getElementById("lanes"), lx = fitCanvas(lanes);
@@ -1413,7 +1423,7 @@ function renderBoard() {
   });
 }
 function restart() {
-  st = newState(mode); acc = 0; dwellCursor = 0; logLen = -1;
+  st = newState(mode); acc = 0; logLen = -1;
   smk.clear(); launchAt = -1e9;
   objs.forEach(o => { o._vls = o._ks = false; o._lp = o._bp = null; trailClear(o.trail); trailClear(o.wTrail); o.w.g.visible = false; o.flash.material.opacity = 0; o.smoke.material.opacity = 0; });
   beamPool.forEach(s => { s.b.visible = false; s.life = 0; }); trackBeams.forEach(b => b.visible = false);
@@ -1431,19 +1441,22 @@ document.querySelectorAll(".tabs button").forEach(b => b.addEventListener("click
   document.querySelectorAll(".tabs button").forEach(x => { x.setAttribute("aria-selected", x === b); $(x.dataset.pane).hidden = x !== b; });
 }));
 function endOfRun() {
-  const A1i2 = THREATS.findIndex(d => d.id === "A1"), x = RUNS.spy1.threats, y = RUNS.spy6.threats, lost = m => RUNS[m].threats.reduce((s, t) => s + t.lost, 0);
-  const warn = t => mmss(t.tInt - t.tDet), firstJam = m => Math.min(...THREATS.map((d, i) => d.swarm || d.kind === "bm" ? 1e9 : (RUNS[m].threats[i].dDet || 1e9))) / NM;
+  const x = RUNS.spy1.threats, y = RUNS.spy6.threats;
+  const warn = t => t.tInt != null && t.tDet != null ? mmss(t.tInt - t.tDet) : "—";
   const jamIdx = THREATS.map((d, i) => i).filter(i => x[i].dDet != null && y[i].dDet != null && y[i].dDet - x[i].dDet > 5 && THREATS[i].kind === "drone");
   const jamNm = m => Math.min(...jamIdx.map(i => RUNS[m].threats[i].dDet)) / NM;
   const rows = [
-    ["Warning time on the missile aimed at the ship", "more time to aim and shoot", warn(x[A1i2]), warn(y[A1i2])],
-    ["Drone tracks lost during the swarm", "every lost track has to be found again", String(lost("spy1")), String(lost("spy6"))],
+    ["Warning time on the missile aimed at the ship", "more time to aim and shoot", warn(x[A1i]), warn(y[A1i])],
+    ["Drone tracks lost during the swarm", "every lost track has to be found again", String(lostTotal("spy1")), String(lostTotal("spy6"))],
+    ["Interceptors wasted", "a missile in flight with no track to guide it is lost", String(wastedTotal("spy1")), String(wastedTotal("spy6"))],
     ["Drones under jamming first seen at", "noise from the enemy aircraft blinds the old radar", jamIdx.length ? `${jamNm("spy1").toFixed(0)} nm` : "n/a", jamIdx.length ? `${jamNm("spy6").toFixed(0)} nm` : "n/a"],
     ["Real warhead picked out of the decoys after", "the space missile can only be shot once it's identified", `${DISCRIM.spy1} s`, `${DISCRIM.spy6} s`],
   ];
   $("endT").innerHTML = rows.map(r => `<tr><td>${r[0]}<span class="why">${r[1]}</span></td><td class="s1">${r[2]}</td><td class="s6">${r[3]}</td></tr>`).join("");
-  $("endH").textContent = `Attack defeated with ${mode === "spy6" ? "SPY-6" : "SPY-1D"}`;
-  $("endSub").textContent = "Both radars stop all 17 threats in this model. The difference is how much time and margin the crew has.";
+  const k1 = killCount("spy1"), k6 = killCount("spy6"), mine = mode === "spy6" ? k6 : k1, name = mode === "spy6" ? "SPY-6" : "SPY-1D";
+  $("endH").textContent = mine === NR ? `Attack defeated with ${name}` : `${name} stopped ${mine} of ${NR} threats`;
+  $("endSub").textContent = k1 === NR && k6 === NR ? `Both radars stop all ${NR} threats in this model. The difference is how much time and margin the crew has.`
+    : `In this model SPY-1D stops ${k1} of ${NR} threats and SPY-6 stops ${k6}.`;
   $("endOther").textContent = mode === "spy6" ? "Run it with SPY-1D" : "Run it with SPY-6";
   $("endcard").hidden = false;
 }
@@ -1460,17 +1473,17 @@ $("capBtn").addEventListener("click", () => { const off = $("view").classList.to
 $("dlcsv").addEventListener("click", () => {
   const q = v => v == null ? "" : (typeof v === "number" ? +v.toFixed(2) : `"${String(v).replace(/"/g, '""')}"`);
   const out = [["# SPY-6 vs SPY-1D kill-chain simulation results. Times in seconds of scenario time; ranges in nautical miles; altitudes in km. Model outputs, not real performance."],
-    ["radar", "track", "name", "class", "rcs_m2", "launch_s", "first_detect_s", "detect_range_nm", "identified_s", "weapon", "weapon_launch_s", "intercept_s", "intercept_range_nm", "intercept_alt_km", "warning_time_s", "tracks_lost", "outcome"]];
+    ["radar", "track", "name", "class", "rcs_m2", "launch_s", "first_detect_s", "detect_range_nm", "identified_s", "weapon", "weapon_launch_s", "intercept_s", "intercept_range_nm", "intercept_alt_km", "warning_time_s", "tracks_lost", "interceptors_wasted", "outcome"]];
   ["spy1", "spy6"].forEach(m => RUNS[m].threats.forEach(t => out.push([m === "spy6" ? "SPY-6(V)1" : "SPY-1D", t.d.tn, t.d.name, t.d.cls, t.d.rcs, t.d.path.t0, t.tDet, t.dDet == null ? null : t.dDet / NM, t.tId, t.d.weapon, t.tLaunch, t.tInt,
-    t.intPoint ? Math.hypot(t.intPoint.x, t.intPoint.z) / NM : null, t.intPoint ? t.intPoint.y : null, t.tDet != null && t.tInt != null ? t.tInt - t.tDet : null, t.lost, t.outcome].map(q))));
-  out.push([]); out.push(["radar", "mean_track_update_s", "worst_track_update_s", "tracks_lost_total"]);
-  ["spy1", "spy6"].forEach(m => out.push([m === "spy6" ? "SPY-6(V)1" : "SPY-1D", q(avgArr(RUNS[m].updates)), q(Math.max(...RUNS[m].updates)), RUNS[m].threats.reduce((s, t) => s + t.lost, 0)]));
+    t.intPoint ? Math.hypot(t.intPoint.x, t.intPoint.z) / NM : null, t.intPoint ? t.intPoint.y : null, t.tDet != null && t.tInt != null ? t.tInt - t.tDet : null, t.lost, t.wasted, t.outcome].map(q))));
+  out.push([]); out.push(["radar", "mean_track_update_s", "worst_track_update_s", "tracks_lost_total", "interceptors_wasted_total"]);
+  ["spy1", "spy6"].forEach(m => out.push([m === "spy6" ? "SPY-6(V)1" : "SPY-1D", q(avgArr(RUNS[m].updates)), q(maxArr(RUNS[m].updates)), lostTotal(m), wastedTotal(m)]));
   out.push([]); out.push(["radar", "time_s", "event"]);
   ["spy1", "spy6"].forEach(m => RUNS[m].events.forEach(e => out.push([m === "spy6" ? "SPY-6(V)1" : "SPY-1D", q(e.t), q(e.msg)])));
   const blob = new Blob([out.map(r => r.join(",")).join("\n")], { type: "text/csv" }), a = document.createElement("a");
   a.href = URL.createObjectURL(blob); a.download = "spy6_vs_spy1d_results.csv"; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
 });
-function setMode(m) { mode = m; $("m6").setAttribute("aria-pressed", m === "spy6"); $("m1").setAttribute("aria-pressed", m === "spy1"); const was = playing; restart(); setPlaying(was || true); }
+function setMode(m) { mode = m; $("m6").setAttribute("aria-pressed", m === "spy6"); $("m1").setAttribute("aria-pressed", m === "spy1"); restart(); setPlaying(true); }
 $("play").addEventListener("click", () => { if (st.t >= END_T || doneAt(st)) restart(); setPlaying(!playing); });
 $("restart").addEventListener("click", () => { restart(); setPlaying(true); });
 $("m6").addEventListener("click", () => setMode("spy6"));
@@ -1538,7 +1551,6 @@ function startFollow(i) {
 let auto = true, shot = null, shotHold = 0;
 function setAuto(on) { auto = on; $("camAuto").setAttribute("aria-pressed", on); if (on) { shot = null; shotHold = 0; focus = null; flight = null; follow = null; camAnim = null; Object.keys(CAMS).forEach(k => $(k).setAttribute("aria-pressed", false)); } }
 function manual() { if (auto) { auto = false; $("camAuto").setAttribute("aria-pressed", false); $("camtag").textContent = "Free camera"; } }
-const A1i = THREATS.findIndex(d => d.id === "A1");
 const SHOTNAME = { gun: "Watching: close-in guns", ship: "Watching: your ship", swarm: "Watching: the drone swarm", jam: "Watching: the jamming aircraft", a1: "Watching: the missile aimed at your ship", space: "Watching: the missile in space", decoys: "Watching: decoys in space" };
 const DRIFT = { ship: 0.035, swarm: 0.02, jam: 0.012, space: 0.01 };
 let focus = null, focusUntil = 0, dirSeen = 0, dirDecoy = false;
@@ -1587,7 +1599,7 @@ function shotRig(id) {
     const dir = V(tp.x - m.x, 0, tp.z - m.z).normalize(), side = V(-dir.z, 0, dir.x);
     let score = 0; st.threats.forEach((o, j) => { if (j !== i && o.alive && o.stage >= 1) score += Math.sign(o.pos.x * side.x + o.pos.z * side.z); });
     if (score > 0) side.multiplyScalar(-1);                                       // stand on the side away from the other tracks' beams
-    return rigFrom(V(side.x * 0.3 - dir.x * 0.14, 0.045, side.z * 0.3 - dir.z * 0.14), V(dir.x * 0.22, 0.008, dir.z * 0.22)); }   // off the ship's beam: whole ship firing toward the target   // off the ship's beam: whole ship in the foreground, firing toward the target
+    return rigFrom(V(side.x * 0.3 - dir.x * 0.14, 0.045, side.z * 0.3 - dir.z * 0.14), V(dir.x * 0.22, 0.008, dir.z * 0.22)); }   // off the ship's beam: whole ship in the foreground, firing toward the target
   if (id === "swarm") return SHOT_SWARM;
   if (id === "jam") return SHOT_JAM;
   if (id === "space") { // side-on to the missile's whole arc, from the sea side, so the climb above 100 km reads clearly
@@ -1657,7 +1669,6 @@ function place(el, p, sizePx) {
 function setLbl(el, html) { const l = el._lbl || (el._lbl = el.querySelector(".lbl")); if (l && l._h !== html) { l._h = html; l.innerHTML = html; } }
 function render(realDt, now = performance.now()) {
   // radar dwells -> beams. Beams and glows fade out when the camera is right up against the ship (no strobing in your face)
-  dwellCursor = st.dwells.length;
   const shipDist = camera.position.length(), nearFadeG = THREE.MathUtils.smoothstep(shipDist, 0.05, 0.35); let nearFade = nearFadeG;
   st.threats.forEach((th, i) => {
     const tb = trackBeams[i];
@@ -1711,6 +1722,7 @@ function render(realDt, now = performance.now()) {
     // interceptor
     renderGun(th, i);
     const flying = th.stage >= 4 && !th.deadAt && !WEAPON[d.weapon].gun && st.t >= th.tLaunch;
+    if (o._lt !== th.tLaunch) { o._lt = th.tLaunch; o._vls = false; o._lp = null; trailClear(o.wTrail); }   // fresh launch after an abort
     o.w.g.visible = flying;
     if (flying) {
       const p = interceptorPos(th, st.t, V(0, 0, 0)), q = interceptorPos(th, st.t + 0.2, V(0, 0, 0)).sub(p);

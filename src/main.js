@@ -50,7 +50,7 @@ function setCam(c) {
   state.cam = c; state.follow = null; ui.followRow(null); rig.free = c !== "auto";
   if (c === "auto") director.since = -99;
   else if (PRESET[c]) rig.go(PRESET[c](), { cut: true });
-  ui.setCam(c, c === "auto" ? director.label : c === "theater" ? "Theater" : "Free camera");
+  ui.setCam(c, c === "auto" ? director.label : ({ theater: "Theater", ship: "Ship", space: "Space", map: "Map" })[c] || "Free camera");
 }
 function follow(i) {
   state.cam = "follow"; state.follow = i; rig.free = true; ui.setCam(null, `Following ${THREATS[i].name}`); ui.followRow(i);

@@ -105,7 +105,8 @@ export class World {
     this.st = newState(this.mode); this.acc = 0;
     while (this.st.t < t - 1e-9) step(this.st, STEP);
     this.smoke.clear(); this.fire.clear(); this.vlsHeat = 0;
-    this.vis.forEach(o => { o.killAge = this.st.threats[o.i].deadAt != null ? 99 : -1; o.lastW = null; o.lastB = null; o.launchSeen = this.st.threats[o.i].tLaunch; o.launched = o.launchSeen != null && this.st.t >= o.launchSeen; o.shotSeen = 99; if (this.st.threats[o.i].tLaunch == null) o.shotSeen = 0; });
+    // a kill that happened moments before the seek point still shows its flash and debris
+    this.vis.forEach(o => { const dth = this.st.threats[o.i]; o.killAge = dth.deadAt != null ? (this.st.t - dth.deadAt) / 8 : -1; if (dth.deadAt != null && this.st.t - dth.deadAt < 12) this.killFx(o, dth); o.lastW = null; o.lastB = null; o.launchSeen = this.st.threats[o.i].tLaunch; o.launched = o.launchSeen != null && this.st.t >= o.launchSeen; o.shotSeen = 99; if (this.st.threats[o.i].tLaunch == null) o.shotSeen = 0; });
     this.jamOn = null; this.updateCoverage();
   }
   get done() { return doneAt(this.st); }
@@ -138,12 +139,21 @@ export class World {
     // kills: fire and smoke at the intercept point
     this.vis.forEach(o => {
       const th = st.threats[o.i];
-      if (th.deadAt != null && o.killAge < 0) {
-        o.killAge = 0; const p = toScene(th.intPoint, v1), big = o.d.kind === "bm" ? 3 : 1, inAir = th.intPoint.y < 40;
-        for (let k = 0; k < 26 * big; k++) { v2.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(0.01 + Math.random() * 0.05 * big); this.fire.emit(p, v2, th.deadAt, 2.2 + Math.random() * 3, 14 * big, 2, 1.0 * 4, 0.62 * 4, 0.25 * 4, 1, 0.004); }
-        if (inAir) for (let k = 0; k < 22; k++) { v2.set(Math.random() - 0.5, Math.random() * 0.4, Math.random() - 0.5).multiplyScalar(0.012); this.smoke.emit(p, v2, th.deadAt, 80, 18, 170, 0.34, 0.33, 0.33, 0.8, 0.03); }
-      }
+      if (th.deadAt != null && o.killAge < 0) { o.killAge = 0; this.killFx(o, th); }
     });
+  }
+  // Debris of an intercept. In the air: a fireball, dark smoke, fragments arcing down. In space: a silent, fast, long-lived spray.
+  killFx(o, th) {
+    const p = toScene(th.intPoint, v1), t0 = th.deadAt, exo = th.intPoint.y >= 100, big = o.d.kind === "bm" ? 3 : 1;
+    const rnd = s => v2.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(s);
+    if (exo) {
+      for (let k = 0; k < 150; k++) { rnd(0.35 + Math.random() * 1.6); const w = Math.random(); this.fire.emit(p, v2, t0, 9 + Math.random() * 12, 900, 260, 3.2 + 3 * w, 2.6 + 2 * w, 1.6 + 3 * w, 1, 0.3); }
+      for (let k = 0; k < 30; k++) { rnd(0.08 + Math.random() * 0.3); this.fire.emit(p, v2, t0, 5 + Math.random() * 5, 2600, 900, 5, 4.2, 3.2, 0.8, 0.2); }
+      return;
+    }
+    for (let k = 0; k < 30 * big; k++) { rnd(0.012 + Math.random() * 0.05 * big); this.fire.emit(p, v2, t0, 1.6 + Math.random() * 2.6, 16 * big, 3, 5, 2.6, 0.9, 1, 0.004); }
+    for (let k = 0; k < 16; k++) { rnd(0.02 + Math.random() * 0.07); v2.y -= 0.03; this.fire.emit(p, v2, t0, 5 + Math.random() * 5, 3.5, 1.5, 4, 2.2, 0.8, 1, 0.002); }       // burning fragments falling to the sea
+    for (let k = 0; k < 24; k++) { v2.set(Math.random() - 0.5, Math.random() * 0.4, Math.random() - 0.5).multiplyScalar(0.012); this.smoke.emit(p, v2, t0, 80, 18, 170, 0.20, 0.19, 0.19, 0.85, 0.03); }
   }
   launchFx(t) {
     const p = toScene(LAUNCH, v1); this.vlsHeat = 1;

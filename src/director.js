@@ -66,7 +66,7 @@ export class Director {
       case "space": {
         const w = worlds.find(x => x.st.threats[B1i].alive) || worlds[0], b = w.st.threats[B1i], p = b.alive ? THREATS[B1i].path.pos(t, m1) : b.intPoint, c = V(p.x, p.y, p.z);
         const pts = [c]; if (b.alive && b.tLaunch != null && t >= b.tLaunch && b.tInt != null) { const q = interceptorPos(b, t, m1); pts.push(V(q.x, q.y, q.z)); }
-        return fit(pts, -1.05 + drift, 0.05, { min: 190, pad: 1.5, fov: 42, lift: 22 });
+        return fit(pts, -2.55 + drift, 0.16, { min: 230, pad: 1.5, fov: 42, lift: 30 });
       }
       case "jam": { const j = jammerPos(t, m1); return fit([SHIP, V(j.x, 0, j.z), V(-120, 0, 0), V(0, 0, 150), ...this.points(worlds, t, d => d.kind !== "bm" && !d.swarm)], -1.75 + drift, 0.62, { min: 420, pad: 1.15 }); }
       case "swarm": return fit([SHIP, ...this.points(worlds, t, d => d.swarm)], -1.22 + drift, 0.34, { min: 6, pad: 1.2 });

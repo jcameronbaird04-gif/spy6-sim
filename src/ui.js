@@ -127,7 +127,7 @@ export class UI {
     }
     x.restore();
     x.fillStyle = col; x.beginPath(); x.arc(mid, mid, 2.2, 0, 7); x.fill();
-    x.fillStyle = "rgba(255,255,255,.5)"; x.font = "9px JetBrains Mono, monospace"; x.textAlign = "center"; x.fillText("N", mid, 13); x.fillText(`${RADAR_NAME[w.mode]} picture · ${full} nm`, mid, W - 9);
+    x.fillStyle = "rgba(255,255,255,.5)"; x.font = "9px JetBrains Mono, monospace"; x.textAlign = "center"; x.fillText("N", mid, 13); x.font = "8px JetBrains Mono, monospace"; x.fillText(`radar picture · ${full} nm`, mid, W - 16);
   }
 
   // Timeline: one lane per radar, tracks held over time (filled), threats it could not track (red), kills (ticks).
@@ -136,7 +136,7 @@ export class UI {
     if (this._tlW !== W || this._tlH !== H) {
       this._tlW = W; this._tlH = H; const off = this._tlBg = document.createElement("canvas"), o = fit(off, W, H), laneH = (H - 14) / 2, peak = Math.max(...this.RUNS.spy1.series.map(r => r.held), ...this.RUNS.spy6.series.map(r => r.held), 1);
       o.font = "9px JetBrains Mono, monospace"; o.textBaseline = "middle";
-      ACTS.forEach((a, i) => { const X = tx(a.t), X2 = tx(ACTS[i + 1]?.t ?? this.D); o.fillStyle = i % 2 ? "rgba(255,255,255,.035)" : "rgba(255,255,255,.07)"; o.fillRect(X, 12, X2 - X, H - 12); o.fillStyle = "rgba(255,255,255,.5)"; o.textAlign = "left"; const lab = a.title.toUpperCase(), short = `ACT ${i + 1}`; o.fillText(o.measureText(lab).width < X2 - X - 8 ? lab : short, X + 4, 6); });
+      ACTS.forEach((a, i) => { const X = tx(a.t), X2 = tx(ACTS[i + 1]?.t ?? this.D); o.fillStyle = i % 2 ? "rgba(255,255,255,.035)" : "rgba(255,255,255,.07)"; o.fillRect(X, 12, X2 - X, H - 12); o.fillStyle = "rgba(255,255,255,.5)"; o.textAlign = "left"; const fits = s => o.measureText(s).width < X2 - X - 8, lab = [a.title.toUpperCase(), ["BALLISTIC", "JAMMING", "SWARM"][i], `ACT ${i + 1}`, String(i + 1)].find(fits); if (lab) o.fillText(lab, X + 4, 6); });
       for (let m = 0; m * 60 <= this.D; m += 2) { o.fillStyle = "rgba(255,255,255,.14)"; o.fillRect(tx(m * 60), 12, 1, H - 12); }
       ["spy1", "spy6"].forEach((m, li) => {
         const run = this.RUNS[m], y1 = 14 + (li + 1) * laneH - 1, hgt = laneH - 3, S = this.S[m];
@@ -144,7 +144,7 @@ export class UI {
         const area = (key, fill) => { o.beginPath(); o.moveTo(tx(0), y1); for (const r of run.series) o.lineTo(tx(r.t), y1 - Math.min(r[key] / peak, 1) * hgt); o.lineTo(tx(run.series.at(-1).t), y1); o.closePath(); o.fillStyle = fill; o.fill(); };
         o.globalAlpha = 0.6; area("held", COL[m]); o.globalAlpha = 1; area("waiting", "#ff5a4f");
         o.fillStyle = "rgba(255,255,255,.85)"; for (const th of run.threats) if (th.tInt) o.fillRect(tx(th.tInt) - 0.5, y1 - hgt, 1, 3);
-        o.fillStyle = COL[m]; o.fillRect(tx(S.lastKill), y1 - hgt, 1.5, hgt); o.textAlign = "left"; o.fillText("done", tx(S.lastKill) + 4, y1 - hgt / 2);
+        { const X = tx(S.lastKill), room = X + 4 + o.measureText("done").width < x1; o.fillStyle = COL[m]; o.fillRect(X, y1 - hgt, 1.5, hgt); o.textAlign = room ? "left" : "right"; o.fillText("done", room ? X + 4 : X - 4, y1 - hgt / 2); o.textAlign = "left"; }
       });
     }
     x.clearRect(0, 0, W, H); x.drawImage(this._tlBg, 0, 0, W, H);

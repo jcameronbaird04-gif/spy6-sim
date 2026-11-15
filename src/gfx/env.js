@@ -90,53 +90,72 @@ const oceanMat = new THREE.ShaderMaterial({
     ${LOGDEPTH_F.pars}
     uniform vec3 uCamPos; varying vec3 vW; varying float vAlt;
     ${NOISE}${CURVE}${SKY}${WAVES}
-    // foam the ship leaves: hull wash, turbulent centre line astern, Kelvin arms
-    float shipFoam(vec2 p, float t){
-      vec2 q = p * 1000.0;                                   // metres; bow at -z, stern at +z
+    const vec2 WIND = vec2(0.5547, 0.8321);                 // the way the wind streaks the surface
+    // Foam the ship makes, as a 0..1 "how churned is the water here". q in metres, bow at -z, stern at +z.
+    float shipChurn(vec2 q){
       float along = q.y, across = abs(q.x);
-      float hull = 1.0 - smoothstep(0.0, 1.0, max((across - 10.3) / 4.5, (abs(along) - 78.0) / 9.0) + 0.55 * step(along, 0.0) * smoothstep(20.0, 78.0, -along) * across / 10.3);
-      float Y = max(along - 70.0, 0.0);
-      float n = fbm4(vec2(q.x * 0.22, (along - t * 7.5) * 0.10)), n2 = fbm4(vec2(q.x * 0.9, (along - t * 7.5) * 0.4));
-      float core = exp(-pow(across / (6.0 + 0.012 * Y + 0.9 * sqrt(Y * 0.3)), 2.0)) * exp(-Y / 330.0) * step(70.0, along) * 0.8;
-      float arm = abs(across - (9.0 + (along + 62.0) * 0.34));
-      float kelvin = exp(-pow(arm / (1.6 + (along + 62.0) * 0.03), 2.0)) * exp(-(along + 62.0) / 260.0) * step(-62.0, along) * 0.45;
-      float wash = hull * 0.55;
-      return clamp(core * (0.25 + 1.0 * n) * smoothstep(0.25, 0.7, n + core * 0.4) + kelvin * smoothstep(0.35, 0.75, n2) + wash * (0.4 + 0.9 * n2), 0.0, 1.0);
+      float hbw = 9.8 * (along < 0.0 ? pow(max(cos(clamp(-along / 80.0, 0.0, 1.0) * 1.5708), 0.0), 0.7) : 0.86 + 0.14 * (1.0 - smoothstep(20.0, 77.0, along)));   // hull half-breadth at the waterline
+      float inLen = step(-80.0, along) * step(along, 77.5);
+      float wash = (1.0 - smoothstep(0.0, 2.6, across - hbw)) * smoothstep(-2.5, 0.5, across - hbw) * inLen;                 // thin band hugging the hull
+      float bow = exp(-pow((across - (1.0 + (along + 76.0) * 0.30)) / (1.2 + (along + 76.0) * 0.045), 2.0)) * (1.0 - smoothstep(-70.0, 30.0, along)) * step(-78.0, along);
+      float Y = max(along - 76.0, 0.0);
+      float stern = exp(-pow(across / (7.5 + 0.02 * Y + 0.7 * sqrt(Y)), 2.0)) * exp(-Y / 420.0) * step(76.0, along);
+      float arm = exp(-pow((across - (10.0 + (along + 60.0) * 0.33)) / (2.0 + (along + 60.0) * 0.035), 2.0)) * exp(-(along + 60.0) / 300.0) * step(-60.0, along) * 0.5;
+      return clamp(wash * 0.9 + bow * 1.1 + stern * 1.15 + arm, 0.0, 1.3);
     }
     void main(){
       ${LOGDEPTH_F.main}
       vec3 toCam = uCamPos - vW; float dist = length(toCam); vec3 V = toCam / dist;
-      vec2 p = vW.xz;
+      vec2 p = vW.xz, q = p * 1000.0, qd = (p + uDrift) * 1000.0;
       // pixel footprint on the water in metres: waves smaller than this are filtered into roughness instead of aliasing
       float foot = dist * 1000.0 * 0.0011 / max(abs(V.y), 0.035);
       float cut = foot * 2.0;
-      float e = max(0.00012, foot * 0.0006);
-      float h0 = waveHeight(p, 26, cut), hx = waveHeight(p + vec2(e, 0.0), 26, cut), hz = waveHeight(p + vec2(0.0, e), 26, cut);
-      float amp = ${WAVE_HEIGHT_M.toFixed(2)} * 1.25;
-      vec3 N = normalize(vec3(-(hx - h0) * amp / (e * 1000.0), 1.0, -(hz - h0) * amp / (e * 1000.0)));
+      float e = max(0.00010, foot * 0.0006);
+      float h0 = waveHeight(p, 28, cut), hx = waveHeight(p + vec2(e, 0.0), 28, cut), hz = waveHeight(p + vec2(0.0, e), 28, cut);
+      float amp = ${WAVE_HEIGHT_M.toFixed(2)} * 1.55;
+      vec2 slope = vec2(hx - h0, hz - h0) * amp / (e * 1000.0);
+      // capillary ripples riding on the chop: only where a pixel can resolve them
+      float capK = 1.0 - smoothstep(0.03, 0.30, foot);
+      if (capK > 0.0) {
+        vec2 c1 = vec2(dot(qd, vec2(WIND.y, -WIND.x)) * 3.2, dot(qd, WIND) * 1.1) + uTime * vec2(0.9, 1.7), c2 = qd * 5.5 + uTime * vec2(-1.3, 0.8);
+        float a0 = vnoise(c1), b0 = vnoise(c2);
+        slope += (vec2(vnoise(c1 + vec2(0.15, 0.0)) - a0, vnoise(c1 + vec2(0.0, 0.15)) - a0) * 0.9 + vec2(vnoise(c2 + vec2(0.2, 0.0)) - b0, vnoise(c2 + vec2(0.0, 0.2)) - b0) * 0.6) * capK;
+      }
+      vec3 N = normalize(vec3(-slope.x, 1.0, -slope.y));
       // kilometre-scale wind patches keep the sea alive from altitude
       float patchN = fbm4(p * 0.16 + uTime * 0.0015);
-      float rough = clamp(0.028 + 0.11 * smoothstep(6.0, 400.0, foot) + 0.06 * (patchN - 0.5), 0.02, 0.35);
-      N = normalize(mix(N, vec3(0.0, 1.0, 0.0), smoothstep(40.0, 2500.0, foot)));
+      float far = smoothstep(40.0, 2500.0, foot);
+      float rough = clamp(0.040 + 0.11 * smoothstep(6.0, 400.0, foot) + 0.06 * (patchN - 0.5), 0.03, 0.35);
+      N = normalize(mix(N, vec3(0.0, 1.0, 0.0), far));
       float NV = clamp(dot(N, V), 0.0, 1.0);
-      float F = 0.02 + 0.98 * pow(1.0 - NV, 5.0);
-      F = mix(F, 0.02 + 0.98 * pow(1.0 - NV, 5.0) * 0.55, smoothstep(40.0, 2500.0, foot));     // sub-pixel waves flatten grazing reflections
+      float F = 0.02 + 0.98 * pow(1.0 - NV, 5.0) * mix(1.0, 0.55, far);                         // sub-pixel waves flatten grazing reflections
       vec3 R = reflect(-V, N); R.y = abs(R.y) + 0.02; R = normalize(R);
       vec3 refl = atmosphere(R, 0.0, 0.0);
-      vec3 deep = vec3(0.004, 0.030, 0.052) + vec3(0.0, 0.050, 0.052) * max(uSunDir.y, 0.0) * 2.0 * (0.4 + 0.6 * patchN);
-      deep += vec3(0.0, 0.07, 0.065) * smoothstep(0.52, 0.9, h0) * pow(max(dot(V, -normalize(vec3(uSunDir.x, 0.0, uSunDir.z))), 0.0), 3.0);   // light through crests
+      vec3 deep = vec3(0.003, 0.022, 0.042) + vec3(0.0, 0.040, 0.044) * max(uSunDir.y, 0.0) * 2.0 * (0.4 + 0.6 * patchN);
+      float crestness = smoothstep(0.45, 0.95, h0);
+      deep += vec3(0.0, 0.085, 0.075) * crestness * (0.25 + 0.75 * pow(max(dot(V, -normalize(vec3(uSunDir.x, 0.0, uSunDir.z))), 0.0), 2.0)) * (1.0 - far);   // light through the crests
       vec3 col = mix(deep, refl, F);
       // sun glitter (GGX), widened with distance
       vec3 Hh = normalize(uSunDir + V); float NH = max(dot(N, Hh), 0.0), a2 = rough * rough * rough * rough;
       float D = a2 / (3.14159 * pow(NH * NH * (a2 - 1.0) + 1.0, 2.0));
-      col += SUN_COL * min(D, 4000.0) * (0.02 + 0.98 * pow(1.0 - clamp(dot(V, Hh), 0.0, 1.0), 5.0)) * max(dot(N, uSunDir), 0.0) * 5.5 * (1.0 - lowSun() * 0.35);
-      // whitecaps and the ship's wake, near field only
-      if (dist < 9.0) {
-        float crest = smoothstep(0.74, 0.97, h0) * smoothstep(0.45, 0.75, fbm4(p * 420.0 + uDrift * 420.0));
-        float foam = crest * 0.5 * (1.0 - smoothstep(2.0, 9.0, dist));
-        if (dot(p, p) < 9.0) foam = max(foam, shipFoam(p, uTime) * 0.92);
-        vec3 foamCol = (hazeColor(V) * 0.55 + SUN_COL * max(uSunDir.y, 0.0) * 2.2 + 0.12) * vec3(0.92, 0.96, 1.0);
-        col = mix(col, foamCol, foam);
+      col += SUN_COL * min(D, 2500.0) * (0.02 + 0.98 * pow(1.0 - clamp(dot(V, Hh), 0.0, 1.0), 5.0)) * max(dot(N, uSunDir), 0.0) * 6.5 * (1.0 - lowSun() * 0.3);
+      // foam: wind-streaked whitecaps on the steepest crests, and everything the hull churns up
+      if (dist < 12.0) {
+        float nearK = 1.0 - smoothstep(3.0, 12.0, dist);
+        vec2 sq = vec2(dot(qd, vec2(WIND.y, -WIND.x)) * 0.30, dot(qd, WIND) * 0.045);
+        float streakN = fbm4(sq), lace = fbm4(qd * 0.45 + vec2(0.0, uTime * 0.2));
+        float cap = smoothstep(0.80, 0.96, h0 + (streakN - 0.5) * 0.30) * smoothstep(0.42, 0.62, lace);
+        float foam = cap * 0.75 * nearK;
+        float shade = 1.0;
+        if (dot(p, p) < 16.0) {
+          float churn = shipChurn(q);
+          float body = fbm4(vec2(q.x * 0.30, (q.y - uTime * 7.2) * 0.16)), fine = fbm4(vec2(q.x * 1.4, (q.y - uTime * 7.2) * 0.9));
+          foam = max(foam, smoothstep(1.05 - churn, 1.30 - churn * 0.75, body * 0.75 + fine * 0.45));     // lacy, breaking up as it thins
+          float along = q.y, hb = 9.8;
+          shade = 1.0 - 0.45 * (1.0 - smoothstep(0.0, 9.0, abs(q.x) - hb)) * step(-80.0, along) * step(along, 78.0);     // the hull shades the water alongside
+        }
+        vec3 foamCol = (hazeColor(V) * 0.50 + SUN_COL * max(uSunDir.y, 0.0) * 3.4 + 0.10) * vec3(0.93, 0.97, 1.0);
+        col = mix(col * shade, foamCol * (0.82 + 0.3 * lace), clamp(foam, 0.0, 1.0));
       }
       // cloud deck seen from above
       if (uCamAlt > 6.0) {

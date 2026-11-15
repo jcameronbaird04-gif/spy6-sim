@@ -13,33 +13,50 @@ float wnoise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * 
   return mix(mix(whash(i), whash(i + vec2(1.0, 0.0)), f.x), mix(whash(i + vec2(0.0, 1.0)), whash(i + vec2(1.0, 1.0)), f.x), f.y); }
 float wfbm(vec2 p){ float a = 0.0, w = 0.5; for (int i = 0; i < 4; i++){ a += w * wnoise(p); p = p * 2.07 + 3.1; w *= 0.5; } return a; }
 `;
-// Painted steel: plate seams, rain streaks and salt, driven by position on the ship so it never swims.
-function paint(color, { hull = false, rough = 0.52 } = {}) {
+// Painted steel as it looks after months at sea: plating dished between frames, welded seams, rain and rust
+// streaks, salt near the waterline, grime where a bulkhead meets the deck. All driven by position on the ship, so
+// nothing swims, and all faded out before it gets smaller than a pixel, so nothing crawls.
+function paint(color, { hull = false, deck = false, rough = 0.5 } = {}) {
   const m = new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: 0.0, envMapIntensity: 1.0 });
   m.onBeforeCompile = sh => {
-    sh.vertexShader = "varying vec3 vOP; varying vec3 vON;\n" + sh.vertexShader.replace("#include <begin_vertex>", "#include <begin_vertex>\n vOP = position; vON = normal;");
-    sh.fragmentShader = "varying vec3 vOP; varying vec3 vON;\n" + WEATHER + sh.fragmentShader
+    sh.vertexShader = "attribute float base; varying vec3 vOP; varying vec3 vON; varying float vBase;\n" + sh.vertexShader.replace("#include <begin_vertex>", "#include <begin_vertex>\n vOP = position; vON = normal; vBase = base;");
+    sh.fragmentShader = "varying vec3 vOP; varying vec3 vON; varying float vBase;\n" + WEATHER + sh.fragmentShader
       .replace("#include <color_fragment>", /* glsl */`#include <color_fragment>
         vec3 P = vOP; vec3 aN = abs(normalize(vON));
-        vec2 uvw = aN.y > 0.7 ? P.xz : (aN.x > aN.z ? P.zy : P.xy);            // dominant-axis projection
-        float plate = max((1.0 - smoothstep(0.0, 0.035, abs(fract(uvw.x / 3.6) - 0.5) * 3.6 - 1.765)), (1.0 - smoothstep(0.0, 0.03, abs(fract(uvw.y / 2.4) - 0.5) * 2.4 - 1.17)));
+        vec2 uvw = aN.y > 0.7 ? P.xz : (aN.x > aN.z ? P.zy : P.xy);            // dominant-axis projection, metres
+        float fw = max(fwidth(uvw.x), fwidth(uvw.y));                            // metres per pixel
+        float fineK = 1.0 - smoothstep(0.04, 0.35, fw), wall = 1.0 - step(0.7, aN.y);
         float n = wfbm(uvw * 0.35), fine = wfbm(uvw * 3.0);
-        float streak = smoothstep(0.55, 0.95, wnoise(vec2(uvw.x * 1.6, uvw.y * 0.05 + 3.0))) * (1.0 - aN.y);
-        float rust = smoothstep(0.80, 0.97, wnoise(vec2(uvw.x * 0.9, 7.0))) * smoothstep(0.55, 0.9, wnoise(vec2(uvw.x * 6.0, uvw.y * 0.35))) * (1.0 - aN.y);
-        diffuseColor.rgb *= 0.88 + 0.20 * n + 0.06 * (fine - 0.5);
-        diffuseColor.rgb *= 1.0 - 0.10 * plate - 0.13 * streak;
-        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.19, 0.085, 0.035), rust * ${hull ? "0.30" : "0.16"});
+        float sx = abs(fract(uvw.x / 3.0) - 0.5) * 3.0, sy = abs(fract(uvw.y / 2.4) - 0.5) * 2.4;
+        float seam = max(1.0 - smoothstep(0.0, 0.025 + fw, 1.5 - sx), 1.0 - smoothstep(0.0, 0.025 + fw, 1.2 - sy)) * (1.0 - smoothstep(0.12, 0.5, fw));
+        float streak = smoothstep(0.5, 0.95, wnoise(vec2(uvw.x * 1.7, uvw.y * 0.06 + 3.0))) * wall;
+        float bleed = smoothstep(0.84, 0.97, wnoise(vec2(floor(uvw.x / 0.55) * 7.3, 2.0)));
+        float rust = bleed * smoothstep(0.3, 0.9, wnoise(vec2(uvw.x * 5.0, uvw.y * 0.4))) * wall;
+        diffuseColor.rgb *= 0.84 + 0.24 * n + 0.10 * (fine - 0.5) * fineK;
+        diffuseColor.rgb *= 1.0 - 0.20 * seam * wall - 0.17 * streak;
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.21, 0.085, 0.03), rust * ${hull ? "0.42" : "0.22"});
         ${hull ? /* glsl */`
-        float salt = (1.0 - smoothstep(0.9, 3.2, P.y)) * (0.5 + 0.5 * n);
-        diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 1.25 + 0.03, salt * 0.35);
-        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.012), (1.0 - smoothstep(0.75, 0.95, P.y)) * smoothstep(-0.55, -0.4, P.y));   // boot topping
-        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.16, 0.035, 0.03), (1.0 - smoothstep(-0.55, -0.4, P.y)));                      // anti-fouling red` : ""}`)
-      .replace("#include <roughnessmap_fragment>", "#include <roughnessmap_fragment>\n roughnessFactor = clamp(roughnessFactor + (wfbm(vOP.xz * 2.2 + vOP.y) - 0.5) * 0.35, 0.2, 1.0);");
+        float salt = (1.0 - smoothstep(0.9, 3.4, P.y)) * (0.4 + 0.6 * n);
+        diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 1.3 + 0.035, salt * 0.4);
+        diffuseColor.rgb *= 1.0 - 0.35 * (1.0 - smoothstep(0.9, 1.5 + 0.5 * n, P.y));                                                // wet band above the boot topping
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.010), (1.0 - smoothstep(0.75, 0.95, P.y)) * smoothstep(-0.55, -0.4, P.y));   // boot topping
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.16, 0.035, 0.03), (1.0 - smoothstep(-0.55, -0.4, P.y)));                      // anti-fouling red` : deck ? /* glsl */`
+        diffuseColor.rgb *= 0.82 + 0.30 * whash(floor(P.xz * 14.0)) * fineK + 0.10 * wfbm(P.xz * 0.12);                               // non-skid grit and wear
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.20, 0.10, 0.05), smoothstep(0.62, 0.9, wfbm(P.xz * 0.5 + 9.0)) * 0.22);` : /* glsl */`
+        diffuseColor.rgb *= mix(1.0, 0.58 + 0.42 * smoothstep(0.0, 3.2 + n, P.y - vBase), wall);                                      // grime and shade where plate meets deck`}`)
+      .replace("#include <roughnessmap_fragment>", "#include <roughnessmap_fragment>\n roughnessFactor = clamp(roughnessFactor + (wfbm(uvw * 2.2) - 0.5) * 0.4 - streak * 0.1, 0.22, 1.0);")
+      .replace("#include <normal_fragment_maps>", /* glsl */`#include <normal_fragment_maps>
+        { float bumpK = (1.0 - smoothstep(0.03, 0.22, fw)) * wall;
+          float hgt = (sin(uvw.x * 6.2832 / 1.0) * sin(uvw.y * 6.2832 / 1.2) * 0.0045 + (wfbm(uvw * 1.6) - 0.5) * 0.006 - seam * 0.005) * bumpK * 0.001;   // oil-canning between frames, in km
+          vec3 q0 = dFdx(vViewPosition), q1 = dFdy(vViewPosition); vec2 dH = vec2(dFdx(hgt), dFdy(hgt));
+          vec3 R1 = cross(q1, normal), R2 = cross(normal, q0); float det = dot(q0, R1);
+          if (abs(det) > 0.0) normal = normalize(abs(det) * normal - sign(det) * (dH.x * R1 + dH.y * R2)); }`);
   };
   return m;
 }
 const MAT = {
-  hull: paint(0x7d858c, { hull: true }), sup: paint(0x8b939a), deck: paint(0x3f4549, { rough: 0.92 }),
+  hull: paint(0x7b838a, { hull: true }), sup: paint(0x8a9299), deck: paint(0x3a4044, { deck: true, rough: 0.94 }), door: paint(0x767e85, { rough: 0.45 }),
+  red: new THREE.MeshStandardMaterial({ color: 0xa3261c, roughness: 0.6 }), helo: new THREE.MeshStandardMaterial({ color: 0x626a71, roughness: 0.55 }),
   dark: new THREE.MeshStandardMaterial({ color: 0x16191c, roughness: 0.6 }),
   black: new THREE.MeshStandardMaterial({ color: 0x08090a, roughness: 0.45 }),
   glass: new THREE.MeshStandardMaterial({ color: 0x05080b, roughness: 0.06, metalness: 1.0, envMapIntensity: 1.6 }),
@@ -60,6 +77,7 @@ function block(g, pts, y0, y1, top, mat, cx = 0, cz = 0, topX = top) {
   for (let i = 1; i < n - 1; i++) idx.push(n, n + i + 1, n + i);
   const geo = new THREE.BufferGeometry(); geo.setAttribute("position", new THREE.Float32BufferAttribute(v, 3)); geo.setIndex(idx);
   const flat = geo.toNonIndexed(); flat.computeVertexNormals();
+  flat.setAttribute("base", new THREE.Float32BufferAttribute(new Float32Array(flat.attributes.position.count).fill(y0), 1));
   const mesh = new THREE.Mesh(flat, mat); g.add(mesh);
   mesh.userData.face = i => {            // centre and outward normal of side face i (for mounting things on it)
     const j = (i + 1) % n, a = new THREE.Vector3(pts[i][0], y0, pts[i][1]), b = new THREE.Vector3(pts[j][0], y0, pts[j][1]), c = new THREE.Vector3(tp[i][0], y1, tp[i][1]), d = new THREE.Vector3(tp[j][0], y1, tp[j][1]);
@@ -200,7 +218,7 @@ export function buildShip(mode) {
   const stack = (x, h) => { const s = block(g, chamfered(x - 5.2, x + 5.2, 4.6, 1.8), dk(x) - 0.2, dk(x) + h, 0.68, MAT.sup, x - 0.6, 0, 0.74);
     block(g, chamfered(x - 4.2, x + 2.4, 2.8, 1.1), dk(x) + h, dk(x) + h + 1.3, 0.92, MAT.black, x - 0.9, 0);
     for (const s2 of [-1, 1]) box(g, 3.0, 2.0, 0.14, x - 0.5, dk(x) + h * 0.55, s2 * 4.05, MAT.dark).rotation.x = s2 * 0.19; return s; };
-  stack(-7, 15.5); stack(-33, 14.0);
+  const st1 = stack(-7, 15.5), st2 = stack(-33, 14.0);
   block(g, chamfered(-42, 5, 7.4, 2.4), dk(-18) - 0.2, dk(-18) + 3.3, 0.94, MAT.sup, -18, 0);
   // boats, torpedo tubes, 25 mm guns, life rafts between the stacks
   for (const s of [-1, 1]) {
@@ -214,7 +232,7 @@ export function buildShip(mode) {
 
   // aft deckhouse: 64-cell VLS between twin hangars, CIWS on top, flight deck to the stern
   { const y = dk(-50), AH = 7.6;
-    const aft = block(g, chamfered(-60.5, -41, 9.0, 2.6), y - 0.2, y + AH, 0.93, MAT.sup, -50, 0);
+    const aft = block(g, chamfered(-60.5, -41, 9.0, 2.6), y - 0.2, y + AH, 0.93, MAT.sup, -50, 0); out.aft = aft;
     const vls = new THREE.Mesh(new THREE.BoxGeometry(10.4, 0.5, 6.6), [MAT.dark, MAT.dark, new THREE.MeshStandardMaterial({ map: vlsTexture(8, 8), roughness: 0.7 }), MAT.dark, MAT.dark, MAT.dark]); vls.position.set(-48, y + AH + 0.2, 0); g.add(vls);
     for (const s of [-1, 1]) { box(g, 0.18, 5.4, 6.0, -60.52, y + 2.9, s * 4.7, MAT.dark); for (let k = 1; k < 6; k++) box(g, 0.22, 0.06, 6.0, -60.54, y + 0.3 + k * 0.9, s * 4.7, MAT.sup); }
     // Phalanx CIWS
@@ -237,6 +255,7 @@ export function buildShip(mode) {
       const hw = halfWL(t) + (halfDeck(t) - halfWL(t)) * 0.52; p.position.set(XS + t * L + stemRake(t) * 0.5 + 0.2, deckY(t) * 0.55, s * (hw + 0.3));
       p.rotation.order = "YXZ"; p.rotation.y = (s > 0 ? 0 : Math.PI) + s * 0.30; p.rotation.x = 0.20; g.add(p); } }
 
+  dress(g, { house, pilot, st1, st2, aft: out.aft, dk, BY });
   g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
   // running lights: small emissive points that bloom
   out.lights.forEach(l => { const s = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), new THREE.MeshBasicMaterial({ color: new THREE.Color(l.color).multiplyScalar(5) })); s.position.copy(l.pos); g.add(s); });
@@ -244,6 +263,68 @@ export function buildShip(mode) {
   const root = new THREE.Group(); g.scale.setScalar(M); g.rotation.y = Math.PI / 2; root.add(g);
   out.root = root; out.inner = g;
   return out;
+}
+
+// ------------------------------------------------------------------ fittings
+// The small things that give a ship its scale: doors, vents, ladders, fire stations, window mullions, bollards,
+// mast gear, an anchor, and a helicopter on the pad.
+function onFace(g, mesh, i) { const f = mesh.userData.face(i), p = new THREE.Group(); p.position.copy(f.centre); p.lookAt(f.centre.clone().add(f.normal)); g.add(p); return p; }
+function door(p, u, v) { box(p, 1.15, 2.2, 0.06, u, v, 0.03, MAT.dark); box(p, 0.95, 2.0, 0.1, u, v, 0.05, MAT.door); const w = cyl(p, 0.16, 0.16, 0.05, u, v + 0.1, 0.12, MAT.dark, 10); w.rotation.x = Math.PI / 2; }
+function vent(p, u, v, w, h) { box(p, w, h, 0.08, u, v, 0.03, MAT.black); const n = Math.max(2, Math.round(h / 0.22)); for (let k = 0; k < n; k++) box(p, w, 0.05, 0.12, u, v - h / 2 + (k + 0.5) * h / n, 0.06, MAT.sup).rotation.x = 0.5; }
+function ladder(p, u, v0, v1) { for (const s of [-1, 1]) box(p, 0.05, v1 - v0, 0.05, u + s * 0.22, (v0 + v1) / 2, 0.1, MAT.dark); for (let v = v0 + 0.2; v < v1; v += 0.32) box(p, 0.44, 0.04, 0.04, u, v, 0.1, MAT.dark); }
+function rib(p, v, w) { box(p, w, 0.14, 0.12, 0, v, 0.05, MAT.sup); }
+function dress(g, { house, pilot, st1, st2, aft, dk, BY }) {
+  // forward deckhouse: sides (faces 3, 7), front (1), aft (5)
+  for (const i of [3, 7]) { const p = onFace(g, house, i), s = i === 3 ? 1 : -1;
+    rib(p, -2.6, 18.6); rib(p, 2.2, 17.6);
+    door(p, -6.5 * s, -5.5); door(p, 5.5 * s, -5.5); door(p, 0.5, -1.4); ladder(p, -3.4 * s, -6.6, -2.6); ladder(p, 7.6 * s, -2.5, 2.2);
+    vent(p, 2.6 * s, -4.9, 2.2, 1.3); vent(p, -8.2 * s, 0.6, 1.6, 1.0); vent(p, 4.4 * s, 4.2, 2.6, 0.9);
+    box(p, 0.5, 0.75, 0.3, -1.2 * s, -5.6, 0.16, MAT.red); box(p, 0.9, 0.5, 0.35, 8.4 * s, -5.9, 0.18, MAT.dark);
+    for (let k = 0; k < 3; k++) { const pipe = cyl(p, 0.05, 0.05, 9, (-0.4 + k * 0.16) * s - 5 * s, 1.4, 0.08, MAT.sup, 6); pipe.castShadow = false; }
+    const buoy = new THREE.Mesh(new THREE.TorusGeometry(0.33, 0.09, 6, 14), MAT.orange); buoy.position.set(3.6 * s, -5.3, 0.1); p.add(buoy); }
+  { const p = onFace(g, house, 1); rib(p, -2.6, 6.6); door(p, -1.6, -5.5); vent(p, 1.6, -4.9, 2.0, 1.2); vent(p, 0, 1.0, 3.2, 1.0); ladder(p, 2.6, -2.5, 2.4); }
+  { const p = onFace(g, house, 5); rib(p, -2.6, 6.6); door(p, 1.6, -5.5); vent(p, -1.4, -1.0, 2.4, 1.4); }
+  // pilothouse: mullions over the window band, wipers' shadow line, searchlights and whip antennas on the roof
+  { const y = BY + 4.45;
+    for (let z = -2.9; z <= 2.91; z += 0.97) box(g, 0.1, 1.15, 0.09, 31.15, y, z, MAT.sup).rotation.z = 0.1;
+    for (const s of [-1, 1]) { for (let x = 19.2; x < 28.5; x += 1.15) box(g, 0.09, 1.15, 0.1, x, y, s * 6.24, MAT.sup); for (let k = 0; k < 3; k++) box(g, 0.09, 1.15, 0.1, 29.2 + k * 0.72, y, s * (5.55 - k * 0.72), MAT.sup, s * -0.785); }
+    box(g, 14.2, 0.18, 13.0, 24.2, BY + 5.68, 0, MAT.sup);
+    for (const s of [-1, 1]) { cyl(g, 0.28, 0.28, 0.5, 29.4, BY + 6.1, s * 3.6, MAT.dark, 12).rotation.z = Math.PI / 2; cyl(g, 0.03, 0.05, 6.5, 19.5, BY + 9.0, s * 5.4, MAT.dark, 5).rotation.x = s * 0.12; cyl(g, 0.5, 0.6, 0.9, 22.5, BY + 6.2, s * 4.6, MAT.white, 12); }
+    cyl(g, 0.9, 1.0, 0.5, 26, BY + 6.0, 0, MAT.sup, 14); box(g, 0.25, 0.6, 3.0, 26, BY + 6.6, 0, MAT.white); }
+  // stacks: uptake ribs, intake louvres, soot round the caps
+  for (const st of [st1, st2]) for (const i of [3, 7]) { const p = onFace(g, st, i); rib(p, -3.4, 7.0); rib(p, 3.2, 5.6); vent(p, -1.6, -5.2, 2.8, 1.6); vent(p, 2.0, -5.2, 1.6, 1.6); ladder(p, 3.2, -6.5, 3.0); }
+  for (const st of [st1, st2]) { const p = onFace(g, st, 1); vent(p, 0, -1.5, 4.2, 2.4); rib(p, 3.2, 4.4); const q = onFace(g, st, 5); vent(q, 0, -3.5, 3.6, 1.8); door(q, 1.9, -6.3); }
+  // aft deckhouse sides
+  for (const i of [3, 7]) { const p = onFace(g, aft, i), s = i === 3 ? 1 : -1; rib(p, 0.6, 14.2); door(p, -4.5 * s, -2.6); door(p, 4.8 * s, -2.6); vent(p, 0.4 * s, -2.2, 2.4, 1.3); vent(p, -1.5 * s, 2.2, 3.0, 0.9); ladder(p, 6.6 * s, -3.6, 3.6); box(p, 0.5, 0.75, 0.3, 2.4 * s, -2.7, 0.16, MAT.red); }
+  // weather deck: bollards and chocks along both sides, capstans and chain on the forecastle, jackstaff, flagstaff
+  for (const s of [-1, 1]) for (const x of [-72, -44, -22, 2, 38, 60]) { const t = (x - XS) / L, z = s * (halfDeck(t) - 1.0), y = dk(x);
+    for (const d of [-0.45, 0.45]) cyl(g, 0.2, 0.24, 0.55, x + d, y + 0.28, z, MAT.dark, 8); box(g, 1.5, 0.12, 0.5, x, y + 0.06, z, MAT.dark); }
+  for (const s of [-1, 1]) { const ch = box(g, 9.5, 0.1, 0.3, 72.5, dk(72.5) + 0.07, s * 1.2, MAT.black); ch.rotation.z = Math.atan2(dk(77) - dk(68), 9); ch.rotation.y = s * 0.08; }
+  cyl(g, 0.04, 0.05, 3.2, deckX(0.992), dk(XS + 0.992 * L) + 1.6, 0, MAT.dark, 5); cyl(g, 0.04, 0.05, 4.2, XS + 0.6, dk(XS + 0.6) + 2.1, 0, MAT.dark, 5);
+  // anchor housed on the starboard bow, with the rust it weeps
+  { const t = 0.945, x = XS + t * L + stemRake(t) * 0.75, y = deckY(t) * 0.74, z = halfWL(t) + (halfDeck(t) - halfWL(t)) * 0.74 + 0.25;
+    const a = new THREE.Group(); a.position.set(x, y, z); a.rotation.y = 0.5; g.add(a);
+    box(a, 1.5, 0.3, 0.3, 0, 0, 0, MAT.black); box(a, 0.3, 1.5, 0.3, 0, -0.5, 0, MAT.black); box(a, 0.5, 0.5, 0.5, 0, 0.4, -0.1, MAT.black); }
+  // mast: IFF ring, TACAN dome, navigation radars, signal halyards
+  { const mast = new THREE.Group(); mast.position.set(13.5, BY + 5.6, 0); mast.rotation.z = 0.13; g.add(mast);
+    cyl(mast, 0.7, 0.7, 0.9, 0, 18.0, 0, MAT.white, 16); const dome = new THREE.Mesh(new THREE.SphereGeometry(0.7, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), MAT.white); dome.position.y = 18.45; mast.add(dome);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(1.5, 0.07, 6, 28), MAT.dark); ring.rotation.x = Math.PI / 2; ring.position.y = 16.2; mast.add(ring);
+    for (let k = 0; k < 8; k++) { const a = k / 8 * Math.PI * 2; cyl(mast, 0.035, 0.035, 0.9, Math.cos(a) * 1.5, 16.6, Math.sin(a) * 1.5, MAT.dark, 5); }
+    box(mast, 0.3, 0.35, 2.6, 2.3, 4.4, 0, MAT.white); cyl(mast, 0.2, 0.25, 0.6, 2.3, 4.0, 0, MAT.dark, 8); box(mast, 2.0, 0.3, 1.6, 1.6, 3.6, 0, MAT.sup);
+    box(mast, 0.3, 0.3, 2.0, -2.2, 7.2, 0, MAT.white); box(mast, 1.6, 0.25, 1.4, -1.6, 6.7, 0, MAT.sup);
+    for (const s of [-1, 1]) { cyl(mast, 0.4, 0.4, 0.5, 0.6, 11.4, s * 2.4, MAT.white, 12); box(mast, 0.5, 0.9, 0.5, 0.4, 7.0, s * 5.6, MAT.dark); }
+    const pts = []; for (const s of [-1, 1]) for (const [y, z] of [[6.2, 6.2], [10.4, 4.4], [14.4, 2.7]]) pts.push(0.4, y, s * z, -3.5, -5.2, s * (z + 1.5));
+    const hal = new THREE.BufferGeometry(); hal.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3)); mast.add(new THREE.LineSegments(hal, MAT.rail)); }
+  // MH-60 on the pad, rotors spread
+  { const h = new THREE.Group(); h.position.set(-67.5, dk(-67.5) + 1.75, 0); g.add(h);
+    const body = new THREE.Mesh(new THREE.CapsuleGeometry(1.05, 4.6, 6, 14), MAT.helo); body.rotation.z = Math.PI / 2; body.scale.set(1.15, 1, 1); h.add(body);
+    const nose = new THREE.Mesh(new THREE.SphereGeometry(1.0, 14, 10), MAT.glass); nose.scale.set(1.25, 0.8, 0.95); nose.position.set(2.75, 0.18, 0); h.add(nose);
+    const boom = cyl(h, 0.28, 0.6, 5.6, -5.4, 0.55, 0, MAT.helo, 10); boom.rotation.z = Math.PI / 2 - 0.1;
+    box(h, 1.5, 2.4, 0.2, -8.3, 1.75, 0, MAT.helo).rotation.z = -0.6; box(h, 0.9, 0.12, 3.0, -7.6, 0.9, 0, MAT.helo);
+    box(h, 3.4, 0.7, 1.5, 0.2, 1.25, 0, MAT.helo); cyl(h, 0.2, 0.2, 0.7, 0.2, 1.9, 0, MAT.dark, 8);
+    for (let k = 0; k < 4; k++) { const b = box(h, 8.0, 0.06, 0.5, 0, 2.28, 0, MAT.dark); b.rotation.y = k * Math.PI / 2 + 0.5; b.translateX(4.1); b.rotation.z = -0.03; }
+    const tr = cyl(h, 1.3, 1.3, 0.05, -8.8, 2.4, 0.3, MAT.dark, 16); tr.rotation.x = Math.PI / 2; tr.material = new THREE.MeshStandardMaterial({ color: 0x15181b, transparent: true, opacity: 0.4 });
+    for (const [x, z] of [[1.4, 1.3], [1.4, -1.3], [-6.4, 0]]) { cyl(h, 0.06, 0.06, 1.0, x, -1.15, z, MAT.dark, 6); const w = cyl(h, 0.3, 0.3, 0.2, x, -1.5, z, MAT.black, 10); w.rotation.x = Math.PI / 2; } }
 }
 
 function vlsTexture(cols, rows) {

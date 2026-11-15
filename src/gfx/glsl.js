@@ -60,11 +60,11 @@ vec3 atmosphere(vec3 d, float alt, float disc){
   vec3 col = mix(SKY_ZEN, hor, band);
   col += SKY_WARM * ls * pow(mup, 5.0) * exp(-el * 10.0) * 0.8;                 // the orange strip under a low sun
   col += vec3(0.55, 0.30, 0.42) * ls * (1.0 - sunward) * exp(-el * 7.0) * 0.10; // belt of Venus opposite the sun
-  col += SUN_COL * (pow(mup, 48.0) * 0.35 + pow(mup, 700.0) * 2.5);              // forward scattering around the sun
+  col += SUN_COL * (pow(mup, 48.0) * 0.30 + pow(mup, 700.0) * 1.3);              // forward scattering around the sun
   // from orbit: black sky and a thin blue limb
   vec3 limb = mix(vec3(0.20, 0.42, 0.95), SKY_WARM, sunward * ls * 0.6) * (exp(-el * 30.0) * 1.3 + exp(-el * 7.0) * 0.12);
   col = mix(col, limb, space);
-  col += SUN_COL * smoothstep(0.99990, 0.99996, mu) * 70.0 * disc;
+  col += SUN_COL * smoothstep(0.99990, 0.99996, mu) * 40.0 * disc;
   return col;
 }
 
@@ -96,13 +96,13 @@ float waveHeight(vec2 pk, int iters, float cut){
   float iter = 0.0, freq = 1.0, tm = ${WAVE_SPEED.toFixed(2)}, w = 1.0, sum = 0.0, norm = 0.0;
   for (int i = 0; i < iters; i++){
     float lambda = ${(2 * Math.PI * WAVE_BASE_M).toFixed(2)} / freq;                 // wavelength in metres
-    float keep = smoothstep(cut, cut * 2.5, lambda);
+    float keep = smoothstep(cut, cut * 2.5 + 1e-3, lambda);
     if (keep <= 0.0) break;
     vec2 dir = vec2(sin(iter), cos(iter));
     vec2 r = wavedx(p, dir, freq, uTime * tm);
     p += dir * r.y * w * ${WAVE_DRAG.toFixed(2)};
     sum += r.x * w * keep; norm += w;
-    w *= 0.82; freq *= ${WAVE_GAIN.toFixed(2)}; tm *= 1.07; iter += 1232.399963;
+    w *= i < 8 ? 0.82 : 0.90; freq *= ${WAVE_GAIN.toFixed(2)}; tm *= 1.07; iter += 1232.399963;      // the short waves keep their steepness: that is the chop
   }
   return norm > 0.0 ? sum / 5.2 : 0.0;                                             // fixed normalisation: no popping as octaves fade
 }

@@ -55,7 +55,8 @@ const GRADE = {
       c = aces(c);
       c = pow(c, vec3(1.0 / 2.2));
       float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
-      c = mix(vec3(l), c, 1.06);
+      c = mix(vec3(l), c, 1.08);
+      c = mix(c, c * c * (3.0 - 2.0 * c), 0.28);                                    // a little more contrast in the mid-tones
       // vignette per view, so each half of a split screen is framed on its own
       vec2 q = vUv; if (uSplit > 0.0) q.x = q.x < uSplit ? q.x / uSplit : (q.x - uSplit) / (1.0 - uSplit);
       q -= 0.5; c *= 1.0 - dot(q, q) * 0.42;
@@ -72,7 +73,7 @@ export class Pipeline {
     this.composer = new EffectComposer(renderer, rt);
     this.views = new ViewsPass(); this.composer.addPass(this.views);
     this.composer.addPass(new ShaderPass(SANITIZE));
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.55, 0.6, 1.0); this.composer.addPass(this.bloom);
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.32, 0.45, 1.15); this.composer.addPass(this.bloom);
     this.grade = new ShaderPass(GRADE); this.composer.addPass(this.grade);
   }
   // Whole pixels only: a fractional buffer size corrupts the bloom mip chain.

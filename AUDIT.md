@@ -116,3 +116,17 @@ A second pass over the audited code, checked against published sources.
 
 This supersedes the "153 tracks lost / 23 interceptors wasted" figures above: those came from the
 under-capacity scheduler.
+
+## Simulation rebuilt (15 Nov 2026)
+
+The simulation's graphics and interface were rewritten; its model was not changed.
+
+- The kill-chain model moved out of `index.html` into `src/model.js` unchanged. Before the move, the old and new
+  code were run side by side and compared: every event, time, range and intercept point is identical for both radars.
+  `tests/model.test.mjs` now pins the results table above (39/39, 102 vs 215 nm, 2:41 vs 7:02, 8 vs 0 untracked,
+  11:45 vs 10:55, 4.0 vs 0.3 s, 18 vs 33 nm) and runs in CI.
+- The interface text and tables are computed from the two runs (`src/story.js`); none of the comparison numbers is typed in.
+- New: side-by-side view of both radars on one clock, per-face track load, reasons a threat is not tracked, coverage
+  domes with the jamming notch, a seekable timeline, charts. A time series (tracks held, untracked, kills, update gap)
+  was added to the CSV export.
+- The previous single-file version is kept as `legacy.html`.

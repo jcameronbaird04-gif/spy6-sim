@@ -185,6 +185,20 @@ table.cmp { width: 100%; border-collapse: collapse; font-size: 12.5px; font-vari
 #end .sub { margin: 0 0 16px; font-size: 14px; color: var(--ink-2); }
 #end .btns { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
 
+/* ---- present mode: the raid as a film. Only the two status cards, the clock and the captions stay ---- */
+#presentHint { position: absolute; left: 50%; top: 16px; transform: translateX(-50%); padding: 7px 12px; border-radius: 8px; background: var(--glass-2); font: 500 11px/1 var(--mono); letter-spacing: .08em; color: var(--ink-2); opacity: 0; pointer-events: none; transition: opacity .6s; z-index: 7; }
+.present #presentHint.on { opacity: 1; }
+.present, .present * { cursor: none !important; }
+.present :is(#bar, #top .r, #drawer, .ppi, #shot, .tempo) { display: none !important; }
+.present #caption { bottom: 44px; width: min(820px, calc(100% - 80px)); }
+.present #caption p { font-size: 17px; }
+.present #app::after, .present::after { height: 150px; }
+.present .card { top: 56px; }
+.present .tag.threat { pointer-events: none; }
+.present #end :is(#endData, #endClose) { display: none; }
+.present #end .cta { padding: 9px 16px; background: none; color: var(--ink-3); border: 1px solid var(--line); font-weight: 500; font-size: 12px; cursor: pointer !important; }
+.present #end, .present #end * { cursor: auto !important; }
+
 /* ---- small screens: one radar at a time ---- */
 @media (max-width: 900px) {
   :root { --bar-h: 118px; }

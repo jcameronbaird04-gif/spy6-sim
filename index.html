@@ -65,6 +65,7 @@
         <button data-view="spy1" aria-pressed="false">SPY-1D</button>
         <button data-view="spy6" aria-pressed="false">SPY-6</button>
       </div>
+      <button id="presentBtn" class="ghost" title="Play the whole raid as a film, with the controls hidden (P)">Present</button>
       <button id="dataBtn" class="ghost" aria-pressed="false">Data</button>
     </div>
   </header>
@@ -129,7 +130,7 @@
       <p class="lede">One raid: 2 ballistic missiles, 2 cruise missiles, 35 drones and a jammer. The same destroyer defends against it twice, once with each radar, on the same clock.</p>
       <ul class="facts" id="facts"></ul>
       <button id="go" class="cta">Run the raid</button>
-      <p class="fine">Drag to orbit · scroll to zoom · right-drag or WASD to move · click a label to follow it<br>Illustrative model from open sources. The one published SPY-6 number used is its +15 dB sensitivity.</p>
+      <p class="fine">Press P to watch it as a film · Drag to orbit · scroll to zoom · right-drag or WASD to move · click a label to follow it<br>Illustrative model from open sources. The one published SPY-6 number used is its +15 dB sensitivity.</p>
     </div>
   </div>
   <div id="end" hidden>
@@ -140,6 +141,7 @@
       <div class="btns"><button class="cta" id="endAgain">Watch again</button><button class="ghost" id="endData">Open the data</button><button class="ghost" id="endClose">Close</button></div>
     </div>
   </div>
+  <div id="presentHint">Presenting · press P or Esc to leave</div>
   <div id="boot">Loading…</div>
 </main>
 <script type="module" src="src/main.js"></script>

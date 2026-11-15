@@ -45,6 +45,24 @@ function setPlaying(p) { state.playing = p; ui.setPlaying(p); }
 function start() { state.started = true; app.classList.add("started"); document.getElementById("start").classList.add("gone"); setPlaying(true); }
 function seek(t) { state.t = Math.max(0, t); ALL.forEach(w => w.reset(state.t)); state.ended = false; document.getElementById("end").hidden = true; ui.resetStory(state.t); if (!state.started) { state.started = true; app.classList.add("started"); document.getElementById("start").classList.add("gone"); } }
 function restart() { seek(0); director.reset(); setCam("auto"); setPlaying(true); }
+// Present mode: the whole raid from the start with the Director camera and no controls on screen, for recording.
+function present(on) {
+  state.present = on; rig.locked = on; app.classList.toggle("present", on);
+  const hint = document.getElementById("presentHint");
+  if (on) {
+    ui.drawer(false); restart();
+    hint.classList.add("on"); setTimeout(() => hint.classList.remove("on"), 2600);
+    document.documentElement.requestFullscreen?.().catch(() => {});
+  } else if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
+  document.getElementById("endAgain").textContent = on ? "Replay" : "Watch again";
+  resize();
+}
+document.getElementById("presentBtn").addEventListener("click", () => present(true));
+window.addEventListener("keydown", e => {
+  if (/INPUT|SELECT|TEXTAREA/.test(e.target.tagName) || e.metaKey || e.ctrlKey) return;
+  if (e.key === "p" || e.key === "P") present(!state.present);
+  else if (e.key === "Escape" && state.present) present(false);
+});
 function setView(v) { state.view = v; ui.setView(v); resize(); }
 function setCam(c) {
   state.cam = c; state.follow = null; ui.followRow(null); rig.free = c !== "auto";
@@ -76,7 +94,7 @@ window.addEventListener("resize", resize);
 function tempo(story) {
   const ws = shown(), t = state.t;
   const gun = ws.some(w => w.st.threats.some(th => WEAPON[th.d.weapon].gun && th.tLaunch != null && t >= th.tLaunch - 2 && (th.deadAt == null || t < th.deadAt + 1.5)));
-  if (gun) return 0.4;
+  if (gun) return ws.some(w => w.st.threats.some(th => th.d.weapon === "CIWS" && th.tLaunch != null && t >= th.tLaunch - 0.5 && th.deadAt == null)) ? 0.09 : 0.4;   // the Phalanx burst lasts 1.6 s: slow right down for it
   const busy = ws.some(w => w.st.threats.some(th => (th.alive && th.stage >= 1) || (th.deadAt != null && t - th.deadAt < 6)));
   return !busy && !story && t > 3 ? 3 : 1;
 }
@@ -121,7 +139,7 @@ function frame(now) {
   // keep the frame rate up on slower machines by trading resolution
   if (raw < 0.5) ft = ft * 0.95 + raw * 1000 * 0.05;
   if (now - perfT > 1500) { perfT = now;
-    if (ft > 26 && pixelRatio > 0.75) { pixelRatio = Math.max(0.75, pixelRatio - 0.2); resize(); }
+    if (ft > 18.5 && pixelRatio > 1) { pixelRatio = Math.max(1, pixelRatio - 0.15); resize(); }
     else if (ft < 13 && pixelRatio < Math.min(PR_MAX, 1.5)) { pixelRatio = Math.min(PR_MAX, 1.5, pixelRatio + 0.1); resize(); } }
   requestAnimationFrame(frame);
 }
@@ -131,4 +149,4 @@ rig.snap(director.pose("hero", ALL, 0));
 requestAnimationFrame(now => { last = now; frame(now); app.classList.remove("loading"); });
 
 // Handles for testing and for taking figures from the console.
-window.sim = { state, worlds, rig, pipeline, director, RUNS, S, seek, setView, setCam, follow, setPlaying };
+window.sim = { state, worlds, rig, pipeline, director, RUNS, S, seek, setView, setCam, follow, setPlaying, present };

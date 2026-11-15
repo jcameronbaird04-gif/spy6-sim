@@ -80,6 +80,8 @@ Open the live link, or serve the folder locally (`python -m http.server 8000`) a
 - **Coverage dome**: where the radar can detect a 0.1 m² target, notched where the jammer cuts its range. The dashed
   ring is the sea-skimmer horizon, the same for both radars.
 - **Timeline**: tracks held over the raid for each radar (red: threats it had no track slot for); click or drag to seek.
+- **Present** (button or `P`): plays the whole raid from the start as a film, Director camera locked, controls and
+  cursor hidden, ending on the results card. Made for screen recording. `P` or `Esc` leaves.
 - **Data**: comparison table, kill chain per threat, charts, event logs, method and assumptions, CSV export.
 
 The Earth is drawn curved with the same 4/3 radius the radar-horizon formula uses, and beams at the model's 1.6°

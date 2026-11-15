@@ -1,6 +1,7 @@
 // The automatic camera: picks the shot that shows what the radar story is about right now, and frames it.
 // It looks at every world on screen, so in the side-by-side view the framing always fits both radars.
 import * as THREE from "three";
+import { sunDir } from "./gfx/env.js";
 import { A1i, ACTS, B1i, JAM, THREATS, WEAPON, interceptorPos, jammerPos, Vec3 } from "./model.js";
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
@@ -73,7 +74,9 @@ export class Director {
       case "fan": return { target: V(0.25, 0.05, -0.12), yaw: -1.18 + drift * 0.5, pitch: 0.13, dist: 1.5, fov: 34 };
       case "gun": { const th = this.activeGun(worlds, t), p = th ? (th.alive ? th.d.path.pos(t, m1) : th.intPoint) : SHIP, brg = Math.atan2(p.x, p.z);
         const L = Math.hypot(p.x, p.z) || 1;
-        return { target: V(p.x / L * 0.07, 0.022, p.z / L * 0.07), yaw: brg + Math.PI + 0.55, pitch: 0.11, dist: 0.46, fov: 42 }; }   // behind the ship, looking out along the line of fire
+        const sunYaw = Math.atan2(sunDir.x, sunDir.z), side = Math.cos(brg + Math.PI + 0.55 - sunYaw) >= Math.cos(brg + Math.PI - 0.55 - sunYaw) ? 0.55 : -0.55;      // stand on the sunlit side
+        const close = th && th.d.weapon === "CIWS";
+        return { target: V(p.x / L * (close ? 0.05 : 0.07), 0.022, p.z / L * (close ? 0.05 : 0.07) + (close ? 0.04 : 0)), yaw: brg + Math.PI + side, pitch: 0.11, dist: close ? 0.3 : 0.46, fov: 42 }; }   // behind the ship, looking out along the line of fire
       default: { const pts = this.points(worlds, t, d => true).filter(p => p.length() < 620); return fit([SHIP, ...pts], -1.38 + drift, 0.52, { min: 24, pad: 1.18 }); }
     }
   }

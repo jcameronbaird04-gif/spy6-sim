@@ -29,7 +29,7 @@ export class Rig {
   }
   snap(pose) { this.des = this.clone(pose); this.cur = this.clone(pose); this.pending = null; this.cutT = 0; }
 
-  manual() { if (!this.free) { this.free = true; this.onManual?.(); } this.pending = null; }
+  manual() { if (this.locked) return false; if (!this.free) { this.free = true; this.onManual?.(); } this.pending = null; return true; }
 
   bind() {
     const el = this.dom, ptrs = new Map(); let pinch = null;
@@ -40,7 +40,7 @@ export class Rig {
       const q = ptrs.get(e.pointerId); if (!q) return;
       const dx = e.clientX - q.x, dy = e.clientY - q.y; q.x = e.clientX; q.y = e.clientY; q.moved += Math.abs(dx) + Math.abs(dy);
       if (q.moved < 4) return;
-      this.manual();
+      if (this.manual() === false) return;
       const d = this.des;
       if (ptrs.size === 1) {
         if (q.pan) {
@@ -52,7 +52,7 @@ export class Rig {
     });
     const end = e => { const q = ptrs.get(e.pointerId); ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = null; if (q && q.moved < 4 && e.type === "pointerup") this.onClick?.(e); };
     el.addEventListener("pointerup", end); el.addEventListener("pointercancel", end);
-    el.addEventListener("wheel", e => { e.preventDefault(); this.manual(); this.des.dist = clamp(this.des.dist * Math.pow(1.0016, e.deltaY), 0.03, 4000); }, { passive: false });
+    el.addEventListener("wheel", e => { e.preventDefault(); if (this.manual() === false) return; this.des.dist = clamp(this.des.dist * Math.pow(1.0016, e.deltaY), 0.03, 4000); }, { passive: false });
     window.addEventListener("keydown", e => { if (/INPUT|SELECT|TEXTAREA/.test(e.target.tagName)) return; const k = e.key.toLowerCase(); if ("wasdqe".includes(k) && k.length === 1) this.keys.add(k); });
     window.addEventListener("keyup", e => this.keys.delete(e.key.toLowerCase()));
     window.addEventListener("blur", () => this.keys.clear());
@@ -60,7 +60,7 @@ export class Rig {
 
   update(dt, seaHeight = 0) {
     const d = this.des, c = this.cur;
-    if (this.keys.size) {
+    if (this.keys.size && !this.locked) {
       this.manual();
       const sp = Math.max(d.dist, 0.05) * 0.9 * dt, fx = -Math.sin(d.yaw), fz = -Math.cos(d.yaw), rx = Math.cos(d.yaw), rz = -Math.sin(d.yaw), k = this.keys;
       const mx = (k.has("w") ? fx : 0) - (k.has("s") ? fx : 0) + (k.has("d") ? rx : 0) - (k.has("a") ? rx : 0), mz = (k.has("w") ? fz : 0) - (k.has("s") ? fz : 0) + (k.has("d") ? rz : 0) - (k.has("a") ? rz : 0);

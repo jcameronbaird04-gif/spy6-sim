@@ -99,9 +99,9 @@ const oceanMat = new THREE.ShaderMaterial({
       float wash = (1.0 - smoothstep(0.0, 2.6, across - hbw)) * smoothstep(-2.5, 0.5, across - hbw) * inLen;                 // thin band hugging the hull
       float bow = exp(-pow((across - (1.0 + (along + 76.0) * 0.30)) / (1.2 + (along + 76.0) * 0.045), 2.0)) * (1.0 - smoothstep(-70.0, 30.0, along)) * step(-78.0, along);
       float Y = max(along - 76.0, 0.0);
-      float stern = exp(-pow(across / (7.5 + 0.02 * Y + 0.7 * sqrt(Y)), 2.0)) * exp(-Y / 420.0) * step(76.0, along);
-      float arm = exp(-pow((across - (10.0 + (along + 60.0) * 0.33)) / (2.0 + (along + 60.0) * 0.035), 2.0)) * exp(-(along + 60.0) / 300.0) * step(-60.0, along) * 0.5;
-      return clamp(wash * 0.9 + bow * 1.1 + stern * 1.15 + arm, 0.0, 1.3);
+      float stern = exp(-pow(across / (7.0 + 0.012 * Y + 0.45 * sqrt(Y)), 2.0)) * exp(-Y / 240.0) * step(76.0, along);
+      float arm = exp(-pow((across - (10.0 + (along + 60.0) * 0.33)) / (2.0 + (along + 60.0) * 0.035), 2.0)) * exp(-(along + 60.0) / 220.0) * step(-60.0, along) * 0.32;
+      return clamp(wash * 0.9 + bow * 1.0 + stern * 0.95 + arm, 0.0, 1.3);
     }
     void main(){
       ${LOGDEPTH_F.main}
@@ -112,7 +112,7 @@ const oceanMat = new THREE.ShaderMaterial({
       float cut = foot * 2.0;
       float e = max(0.00010, foot * 0.0006);
       float h0 = waveHeight(p, 28, cut), hx = waveHeight(p + vec2(e, 0.0), 28, cut), hz = waveHeight(p + vec2(0.0, e), 28, cut);
-      float amp = ${WAVE_HEIGHT_M.toFixed(2)} * 1.55;
+      float amp = ${WAVE_HEIGHT_M.toFixed(2)} * 1.35;
       vec2 slope = vec2(hx - h0, hz - h0) * amp / (e * 1000.0);
       // capillary ripples riding on the chop: only where a pixel can resolve them
       float capK = 1.0 - smoothstep(0.03, 0.30, foot);

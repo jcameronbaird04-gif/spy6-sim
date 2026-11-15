@@ -14,7 +14,7 @@ import { buildShip, facePositions } from "./gfx/ship.js";
 export const COLOR = { spy6: 0x49c8ff, spy1: 0xffb04a, unknown: 0xffd84a, hostile: 0xff4b40, friend: 0x62b8ff, kill: 0x7fe39a, ghost: 0xa9b4be, jam: 0xff8a3a };
 const REF_RCS = 0.1;                                // the coverage dome is drawn for a 0.1 m^2 target (drone / cruise missile)
 const Z = new THREE.Vector3(0, 0, 1);
-const v1 = new THREE.Vector3(), v2 = new THREE.Vector3(), v3 = new THREE.Vector3(), m1 = new Vec3(), m2 = new Vec3();
+const v1 = new THREE.Vector3(), v2 = new THREE.Vector3(), v3 = new THREE.Vector3(), v4 = new THREE.Vector3(), m1 = new Vec3(), m2 = new Vec3();
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const SHORT = { A1: "Anti-ship ballistic missile", B1: "Ballistic missile", C1: "Cruise missile 1", C2: "Cruise missile 2", D5: "Pop-up drone" };
 const nm = km => km / NM;
@@ -69,7 +69,7 @@ export class World {
         o.bursts = Array.from({ length: w.rounds || 0 }, () => add(glowSprite(0xffb060, { intensity: 5 })));
         o.muzzle = add(glowSprite(0xffc46b, { screen: false, intensity: 6 }));
         if (!w.rounds) { const geo = new THREE.BufferGeometry(); geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(30 * 6), 3));
-          o.tracers = add(new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: new THREE.Color(0xffc470).multiplyScalar(5), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }))); o.tracers.frustumCulled = false; o.tracers.visible = false; }
+          o.tracers = add(new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: new THREE.Color(0xffb060).multiplyScalar(9), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }))); o.tracers.frustumCulled = false; o.tracers.visible = false; }
       }
       o.flash = add(glowSprite(0xffe0b0, { intensity: 6 })); o.ring = add(shockRing(0xffd0a0));
       o.tag = this.tag(d.swarm ? "threat mini" : "threat");
@@ -104,9 +104,9 @@ export class World {
   reset(t = 0) {
     this.st = newState(this.mode); this.acc = 0;
     while (this.st.t < t - 1e-9) step(this.st, STEP);
-    this.smoke.clear(); this.fire.clear(); this.vlsHeat = 0;
+    this.smoke.clear(); this.fire.clear(); this.vlsHeat = 0; this.lastLaunch = null;
     // a kill that happened moments before the seek point still shows its flash and debris
-    this.vis.forEach(o => { const dth = this.st.threats[o.i]; o.killAge = dth.deadAt != null ? (this.st.t - dth.deadAt) / 8 : -1; if (dth.deadAt != null && this.st.t - dth.deadAt < 12) this.killFx(o, dth); o.lastW = null; o.lastB = null; o.launchSeen = this.st.threats[o.i].tLaunch; o.launched = o.launchSeen != null && this.st.t >= o.launchSeen; o.shotSeen = 99; if (this.st.threats[o.i].tLaunch == null) o.shotSeen = 0; });
+    this.vis.forEach(o => { const dth = this.st.threats[o.i]; o.killAge = dth.deadAt != null ? (this.st.t - dth.deadAt) / 8 : -1; if (dth.deadAt != null && this.st.t - dth.deadAt < 12) this.killFx(o, dth); o.lastW = null; o.lastB = null; o.firedSeen = 99; o.ciwsT = null; if (this.st.threats[o.i].tLaunch == null) o.firedSeen = 0; o.launchSeen = this.st.threats[o.i].tLaunch; o.launched = o.launchSeen != null && this.st.t >= o.launchSeen; o.shotSeen = 99; if (this.st.threats[o.i].tLaunch == null) o.shotSeen = 0; });
     this.jamOn = null; this.updateCoverage();
   }
   get done() { return doneAt(this.st); }
@@ -130,9 +130,10 @@ export class World {
       if (!flying) return;
       const age = t - th.tLaunch, p = toScene(interceptorPos(th, t, m1), v1);
       if (!o.launched) { o.launched = true; if (age < 3) this.launchFx(t); }
-      if (age < 26 && p.y < 45) {
+      const salvoTrail = o.d.swarm;
+      if (age < (salvoTrail ? 14 : 26) && p.y < 45) {
         const lp = o.lastW || toScene(LAUNCH, new THREE.Vector3()), n = Math.min(14, Math.ceil(lp.distanceTo(p) / 0.07));
-        for (let k = 1; k <= n; k++) this.smoke.emit(v2.lerpVectors(lp, p, k / n), v3.set(0.004, 0.0005, 0.0015), t, 75, 5, 70 + Math.min(p.y, 20) * 5, 0.95, 0.95, 0.93, 0.7, 0.003);
+        for (let k = 1; k <= n; k++) this.smoke.emit(v2.lerpVectors(lp, p, k / n), v3.set(0.004, 0.0005, 0.0015), t, salvoTrail ? 45 : 110, 5, (salvoTrail ? 40 : 75) + Math.min(p.y, 20) * 5, 0.95, 0.95, 0.93, salvoTrail ? 0.4 : 0.65, 0.003);
       }
       o.lastW = (o.lastW || new THREE.Vector3()).copy(p);
     });
@@ -154,11 +155,19 @@ export class World {
     for (let k = 0; k < 30 * big; k++) { rnd(0.012 + Math.random() * 0.05 * big); this.fire.emit(p, v2, t0, 1.6 + Math.random() * 2.6, 16 * big, 3, 5, 2.6, 0.9, 1, 0.004); }
     for (let k = 0; k < 16; k++) { rnd(0.02 + Math.random() * 0.07); v2.y -= 0.03; this.fire.emit(p, v2, t0, 5 + Math.random() * 5, 3.5, 1.5, 4, 2.2, 0.8, 1, 0.002); }       // burning fragments falling to the sea
     for (let k = 0; k < 24; k++) { v2.set(Math.random() - 0.5, Math.random() * 0.4, Math.random() - 0.5).multiplyScalar(0.012); this.smoke.emit(p, v2, t0, 80, 18, 170, 0.20, 0.19, 0.19, 0.85, 0.03); }
+    if (th.intPoint.y < 1.2 && th.intPoint.length() < 25) {              // low and close: the wreckage splashes in
+      const fall = Math.sqrt(2 * th.intPoint.y * 1000 / 9.8), sea = -earthDrop(p.x, p.z);
+      for (let k = 0; k < 12; k++) { const a = Math.random() * 6.283, r = Math.random() * 0.18, q = v3.set(p.x + Math.cos(a) * r, sea + 0.002, p.z + Math.sin(a) * r), tb = t0 + fall * (0.7 + Math.random() * 0.7);
+        for (let j = 0; j < 5; j++) { v2.set((Math.random() - 0.5) * 0.003, 0.006 + Math.random() * 0.012, (Math.random() - 0.5) * 0.003); this.smoke.emit(q, v2, tb, 7, 3, 16, 1.25, 1.3, 1.35, 0.8, 0.003); } }
+    }
   }
+  // A hot launch out of the Mk 41: flame up the uptake, then a cloud that rolls across the deck and drifts downwind for minutes.
   launchFx(t) {
     const p = toScene(LAUNCH, v1); this.vlsHeat = 1;
-    for (let k = 0; k < 46; k++) { v2.set((Math.random() - 0.5) * 0.02, 0.004 + Math.random() * 0.012, (Math.random() - 0.5) * 0.02); this.smoke.emit(p, v2, t, 50, 5, 80, 0.96, 0.95, 0.93, 0.75, 0.01); }
-    for (let k = 0; k < 14; k++) { v2.set((Math.random() - 0.5) * 0.02, 0.01 + Math.random() * 0.03, (Math.random() - 0.5) * 0.02); this.fire.emit(p, v2, t, 3, 9, 3, 4, 2.6, 1.2, 1, 0.006); }
+    const salvo = this.lastLaunch != null && t - this.lastLaunch < 25 && t >= this.lastLaunch; this.lastLaunch = t;     // in a salvo the deck is already in smoke: add a little, not a wall
+    for (let k = 0; k < (salvo ? 5 : 60); k++) { const a = Math.random() * 6.283, r = 0.004 + Math.random() * 0.018; v2.set(Math.cos(a) * r, 0.001 + Math.random() * 0.006, Math.sin(a) * r); this.smoke.emit(p, v2, t + Math.random() * 1.5, 140, 6, 85, 0.93, 0.92, 0.9, 0.55, 0.012); }
+    for (let k = 0; k < (salvo ? 4 : 26); k++) { v2.set((Math.random() - 0.5) * 0.012, 0.012 + Math.random() * 0.02, (Math.random() - 0.5) * 0.012); this.smoke.emit(p, v2, t + Math.random(), 110, 5, 90, 0.96, 0.95, 0.93, 0.75, 0.008); }
+    for (let k = 0; k < 22; k++) { v2.set((Math.random() - 0.5) * 0.02, 0.01 + Math.random() * 0.04, (Math.random() - 0.5) * 0.02); this.fire.emit(p, v2, t, 2.5, 9, 3, 5, 3, 1.2, 1, 0.006); }
   }
 
   // ---------------------------------------------------------------- per-frame sync
@@ -168,7 +177,7 @@ export class World {
     this.realT += realDt;
     const pxAng = 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) / Math.max(view.h, 1);     // radians per CSS pixel
     const camP = camera.position, shipDist = camP.length();
-    this.view = view; this.camera = camera;
+    this.view = view; this.camera = camera; this._active = active;
 
     // --- own ship rides the swell
     { const ts = G.uTime.value, dr = G.uDrift.value, h = (x, z) => waveHeightJS(x, z, ts, dr) * 0.001;
@@ -344,30 +353,48 @@ export class World {
     });
   }
 
+  // Guns. 5-inch: a muzzle blast and rolling smoke for each round, a glowing shell, a black airburst.
+  // Phalanx: a continuous stream of tracer, a haze of gun smoke, sparks where the stream finds the drone.
   syncGun(o, th, t, camP, pxAng) {
-    const w = WEAPON[o.d.weapon], firing = th.stage >= 4 && th.tLaunch != null, mount = toScene(w.mount, v2);
+    const w = WEAPON[o.d.weapon], firing = th.stage >= 4 && th.tLaunch != null, mount = toScene(w.mount, v2), live = this._active;
     if (w.rounds) {
       let flashOn = false;
       for (let k = 0; k < w.rounds; k++) {
         const r = firing && th.rounds ? th.rounds[k] : null, sh = o.shells[k], bu = o.bursts[k];
         sh.visible = !!r && t >= r.tf && t < r.ti; bu.visible = false;
         if (!r) continue;
-        if (sh.visible) { sh.position.lerpVectors(mount, toScene(r.p, v1), (t - r.tf) / (r.ti - r.tf)); sh.scale.setScalar(0.008); }
-        if (t >= r.tf && t < r.tf + 0.4) flashOn = true;
+        const tp = toScene(r.p, v1);
+        if (sh.visible) { sh.position.lerpVectors(mount, tp, (t - r.tf) / (r.ti - r.tf)); sh.scale.setScalar(0.009); }
+        if (t >= r.tf && t < r.tf + 0.35) flashOn = true;
+        if (live && t >= r.tf && (o.firedSeen || 0) <= k) {
+          o.firedSeen = k + 1; const dir = v3.copy(tp).sub(mount).normalize();
+          for (let q = 0; q < 10; q++) { const u = new THREE.Vector3().copy(dir).multiplyScalar(0.02 + Math.random() * 0.05).add(v4.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(0.012)); this.fire.emit(mount, u, r.tf, 0.5 + Math.random() * 0.5, 7, 2, 5, 3, 1.2, 1, 0.002); }
+          for (let q = 0; q < 16; q++) { const u = new THREE.Vector3().copy(dir).multiplyScalar(0.004 + Math.random() * 0.018).add(v4.set(Math.random() - 0.5, Math.random() * 0.6, Math.random() - 0.5).multiplyScalar(0.006)); this.smoke.emit(mount, u, r.tf, 26, 3, 34, 0.62, 0.58, 0.52, 0.7, 0.003); }
+        }
         const age = t - r.ti;
-        if (age >= 0 && age < 1.2) { bu.visible = true; bu.position.copy(toScene(r.p, v1)); bu.scale.setScalar(0.03 + age * 0.05); bu.material.opacity = 1 - age / 1.2; }
-        if (age >= 0 && o.shotSeen <= k) { o.shotSeen = k + 1; const p = toScene(r.p, v1); for (let q = 0; q < 10; q++) { v3.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(0.01); this.smoke.emit(p, v3, r.ti, 40, 8, 60, 0.2, 0.2, 0.2, 0.85, 0.01); } }
+        if (age >= 0 && age < 1.2) { bu.visible = true; bu.position.copy(tp); bu.scale.setScalar(0.03 + age * 0.05); bu.material.opacity = 1 - age / 1.2; }
+        if (live && age >= 0 && o.shotSeen <= k) { o.shotSeen = k + 1;
+          for (let q = 0; q < 14; q++) { v3.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(0.012); this.smoke.emit(tp, v3, r.ti, 45, 8, 70, 0.12, 0.12, 0.12, 0.9, 0.01); }
+          for (let q = 0; q < 12; q++) { v3.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(0.03 + Math.random() * 0.06); this.fire.emit(tp, v3, r.ti, 0.8 + Math.random(), 5, 1.5, 5, 3, 1, 1, 0.002); } }
       }
-      o.muzzle.visible = flashOn; if (flashOn) { o.muzzle.position.copy(mount); o.muzzle.scale.setScalar(0.03); }
+      o.muzzle.visible = flashOn; if (flashOn) { o.muzzle.position.copy(mount); o.muzzle.scale.setScalar(0.045); }
     } else {
       const on = firing && t >= th.tLaunch && t < th.tLaunch + w.burst + 0.6 && th.alive;
-      o.tracers.visible = on; o.muzzle.visible = on && Math.random() < 0.7;
-      if (on) {
-        const arr = o.tracers.geometry.attributes.position.array, tgt = toScene(th.pos, v1), L = mount.distanceTo(tgt), dir = v3.copy(tgt).sub(mount).normalize(), N = 30;
-        for (let n = 0; n < N; n++) { const f = (t * 7 + n / N) % 1, a = f * L, b = Math.min(a + 0.05, L), j = 0.004 * f;
-          arr[n * 6] = mount.x + dir.x * a + (Math.random() - 0.5) * j; arr[n * 6 + 1] = mount.y + dir.y * a + (Math.random() - 0.5) * j; arr[n * 6 + 2] = mount.z + dir.z * a + (Math.random() - 0.5) * j;
-          arr[n * 6 + 3] = mount.x + dir.x * b; arr[n * 6 + 4] = mount.y + dir.y * b; arr[n * 6 + 5] = mount.z + dir.z * b; }
-        o.tracers.geometry.attributes.position.needsUpdate = true; o.muzzle.position.copy(mount); o.muzzle.scale.setScalar(0.018);
+      o.tracers.visible = on; o.muzzle.visible = on && Math.random() < 0.8;
+      if (!on) { o.ciwsT = null; return; }
+      const tgt = toScene(th.pos, v1), L = mount.distanceTo(tgt), dir = v3.copy(tgt).sub(mount).normalize();
+      const arr = o.tracers.geometry.attributes.position.array, N = 30;
+      for (let n = 0; n < N; n++) { const f = (t * 7 + n / N) % 1, a = f * L, b = Math.min(a + 0.05, L), j = 0.004 * f;
+        arr[n * 6] = mount.x + dir.x * a + (Math.random() - 0.5) * j; arr[n * 6 + 1] = mount.y + dir.y * a + (Math.random() - 0.5) * j; arr[n * 6 + 2] = mount.z + dir.z * a + (Math.random() - 0.5) * j;
+        arr[n * 6 + 3] = mount.x + dir.x * b; arr[n * 6 + 4] = mount.y + dir.y * b; arr[n * 6 + 5] = mount.z + dir.z * b; }
+      o.tracers.geometry.attributes.position.needsUpdate = true; o.muzzle.position.copy(mount); o.muzzle.scale.setScalar(0.022);
+      if (live) {
+        // the stream itself: glowing rounds leaving at about 1.1 km/s with a little dispersion
+        const last = o.ciwsT ?? t, n = Math.min(60, Math.floor((t - last) * 75) + 1), life = L / w.v;
+        for (let k = 0; k < n; k++) { const u = new THREE.Vector3().copy(dir).multiplyScalar(w.v / 0.55).add(v4.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(0.012)); this.fire.emit(mount, u, last + (t - last) * k / n, life, 5.0, 4.0, 9, 4.6, 1.2, 1, 0.0006); }
+        if (Math.random() < 0.6) { v4.set((Math.random() - 0.5) * 0.004, 0.002, (Math.random() - 0.5) * 0.004); this.smoke.emit(mount, v4, t, 14, 2, 16, 0.7, 0.68, 0.64, 0.5, 0.001); }
+        if (t > th.tLaunch + life && Math.random() < 0.7) { v4.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(0.05); this.fire.emit(tgt, v4, t, 0.5, 3, 1, 6, 4, 1.5, 1, 0.003); }
+        o.ciwsT = t;
       }
     }
   }

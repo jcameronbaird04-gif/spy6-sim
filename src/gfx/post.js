@@ -25,7 +25,8 @@ class ViewsPass extends Pass {
   }
 }
 
-// Any invalid or absurdly bright pixel would be smeared across the frame by the bloom blur: stop it here.
+// Any invalid or absurdly bright pixel (a sun glint on one wave) would be smeared across the frame by the bloom
+// blur and pulse the whole picture: clamp it here.
 const SANITIZE = {
   uniforms: { tDiffuse: { value: null } },
   vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
@@ -34,7 +35,7 @@ const SANITIZE = {
     void main(){
       vec3 c = texture2D(tDiffuse, vUv).rgb;
       bool ok = c.r >= 0.0 && c.g >= 0.0 && c.b >= 0.0 && c.r < 1e4 && c.g < 1e4 && c.b < 1e4;   // false for NaN and Inf
-      gl_FragColor = vec4(ok ? min(c, vec3(48.0)) : vec3(0.0), 1.0);
+      gl_FragColor = vec4(ok ? min(c, vec3(16.0)) : vec3(0.0), 1.0);
     }`,
 };
 

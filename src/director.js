@@ -85,7 +85,8 @@ export class Director {
     this.clock += realDt;
     let want = this.choose(worlds, t, started);
     const urgent = want === "gun" || want === "launch";
-    if (want !== this.shot && !urgent && this.clock - this.since < 4.5 && this.shot !== "hero") want = this.shot;       // let a shot breathe
+    const held = this.clock - this.since;
+    if (want !== this.shot && this.shot !== "hero" && held < (urgent ? 2 : 6)) want = this.shot;       // let a shot breathe; even urgent shots wait 2 s so cuts never stack up
     const changed = want !== this.shot;
     if (changed) { this.shot = want; this.since = this.clock; }
     this.label = LABEL[want] || "";

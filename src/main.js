@@ -99,7 +99,7 @@ function tempo(story) {
   return !busy && !story && t > 3 ? 3 : 1;
 }
 
-let last = performance.now(), uiT = 0, ft = 16, perfT = 0, story = false;
+let last = performance.now(), uiT = 0, ft = 16, perfT = 0, story = false, pendingPR = null, lastDir = 0, flips = 0, shadowsOn = false;
 const theaterDir = new Director(rig);
 function frame(now) {
   const raw = (now - last) / 1000, realDt = Math.min(raw, 0.1); last = now;
@@ -122,8 +122,11 @@ function frame(now) {
   rig.update(realDt, 0.0015);
   camera.updateMatrixWorld(true);
 
+  // resolution changes happen here, before drawing: resizing the canvas after drawing blanks the frame on screen
+  if (pendingPR != null) { pixelRatio = pendingPR; pendingPR = null; resize(); }
+
   updateEnvironment(camera, now / 1000, ALL.map(w => w.scene));
-  const near = camera.position.length() < 6;
+  const r = camera.position.length(), near = shadowsOn = shadowsOn ? r < 6.5 : r < 5.5;   // hysteresis: no shadow pop at the threshold
   const views = ws.map((w, i) => {
     w.env.sun.castShadow = near;
     w.sync(camera, { w: vw, h: H }, realDt, state.playing);
@@ -136,11 +139,13 @@ function frame(now) {
   if (now - uiT > 90) { uiT = now; ui.refresh(state.t, state.playing ? (state.tempo > 1 ? "fast-forward: nothing on the scope" : state.tempo < 1 ? "slow motion" : `${state.speed * PLAYBACK}× real time`) : state.started ? "paused" : ""); }
   ui.drawTimeline(state.t);
 
-  // keep the frame rate up on slower machines by trading resolution
+  // keep the frame rate up on slower machines by trading resolution. Applied next frame, before drawing.
+  // Hysteresis plus a cap on direction changes so it settles instead of see-sawing (each change reallocates buffers).
   if (raw < 0.5) ft = ft * 0.95 + raw * 1000 * 0.05;
-  if (now - perfT > 1500) { perfT = now;
-    if (ft > 18.5 && pixelRatio > 1) { pixelRatio = Math.max(1, pixelRatio - 0.15); resize(); }
-    else if (ft < 13 && pixelRatio < Math.min(PR_MAX, 1.5)) { pixelRatio = Math.min(PR_MAX, 1.5, pixelRatio + 0.1); resize(); } }
+  if (now - perfT > 3000 && document.visibilityState === "visible") { perfT = now;
+    const prMax = Math.min(PR_MAX, 1.5);
+    if (ft > 22 && pixelRatio > 1) { if (lastDir === 1) flips++; lastDir = -1; pendingPR = Math.max(1, +(pixelRatio - 0.25).toFixed(2)); }
+    else if (ft < 11 && pixelRatio < prMax && flips < 2) { if (lastDir === -1) flips++; lastDir = 1; pendingPR = Math.min(prMax, +(pixelRatio + 0.25).toFixed(2)); } }
   requestAnimationFrame(frame);
 }
 

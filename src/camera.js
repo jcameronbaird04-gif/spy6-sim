@@ -1,5 +1,6 @@
 // Camera rig: orbits a focus point. Shots are poses {target, yaw, pitch, dist, fov}; the rig eases between
-// nearby poses and cuts (through a short fade) between distant ones, the way an editor would.
+// nearby poses and hard-cuts between distant ones, the way an editor would. No fade to black: a black frame
+// every few seconds read as the whole screen flickering.
 import * as THREE from "three";
 import { earthDrop } from "./gfx/env.js";
 
@@ -8,7 +9,7 @@ const wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
 
 export class Rig {
   constructor(camera, dom, fadeEl) {
-    this.camera = camera; this.dom = dom; this.fadeEl = fadeEl;
+    this.camera = camera; this.dom = dom; this.fadeEl = fadeEl; if (fadeEl) fadeEl.style.opacity = "0";
     this.cur = { target: new THREE.Vector3(0, 0.012, 0), yaw: 2.2, pitch: 0.12, dist: 0.42, fov: 38 };
     this.des = this.clone(this.cur);
     this.free = false; this.onManual = null; this.cutT = 0; this.pending = null;
@@ -23,8 +24,7 @@ export class Rig {
   go(pose, { cut = "auto" } = {}) {
     const c = this.cur, jump = c.target.distanceTo(pose.target) / Math.max(c.dist, pose.dist) + Math.abs(Math.log(pose.dist / c.dist)) * 0.6 + Math.abs(wrap(pose.yaw - c.yaw)) * 0.5;
     const doCut = cut === true || (cut === "auto" && jump > 1.6);
-    if (doCut) { this.pending = this.clone(pose); if (this.cutT <= 0) this.cutT = 0.36; }
-    else if (this.pending && this.cutT > 0.18) this.pending = this.clone(pose);      // a cut is fading out: keep its destination current
+    if (doCut) this.snap(pose);
     else { this.des = this.clone(pose); this.pending = null; }
   }
   snap(pose) { this.des = this.clone(pose); this.cur = this.clone(pose); this.pending = null; this.cutT = 0; }
@@ -65,13 +65,6 @@ export class Rig {
       const sp = Math.max(d.dist, 0.05) * 0.9 * dt, fx = -Math.sin(d.yaw), fz = -Math.cos(d.yaw), rx = Math.cos(d.yaw), rz = -Math.sin(d.yaw), k = this.keys;
       const mx = (k.has("w") ? fx : 0) - (k.has("s") ? fx : 0) + (k.has("d") ? rx : 0) - (k.has("a") ? rx : 0), mz = (k.has("w") ? fz : 0) - (k.has("s") ? fz : 0) + (k.has("d") ? rz : 0) - (k.has("a") ? rz : 0);
       d.target.x += mx * sp; d.target.z += mz * sp; d.target.y = Math.max(0, d.target.y + ((k.has("e") ? 1 : 0) - (k.has("q") ? 1 : 0)) * sp);
-    }
-    // cut through a fade: swap the pose at the darkest frame
-    if (this.cutT > 0) {
-      const before = this.cutT; this.cutT -= dt;
-      if (before > 0.18 && this.cutT <= 0.18 && this.pending) { this.snap(this.pending); this.cutT = 0.18; }
-      if (this.fadeEl) this.fadeEl.style.opacity = String(clamp(1 - Math.abs(this.cutT - 0.18) / 0.18, 0, 1));
-      if (this.cutT <= 0 && this.fadeEl) this.fadeEl.style.opacity = "0";
     }
     const k = 1 - Math.exp(-dt * (this.free ? 9 : 2.4));
     c.target.lerp(d.target, k); c.yaw += wrap(d.yaw - c.yaw) * k; c.pitch += (d.pitch - c.pitch) * k;
